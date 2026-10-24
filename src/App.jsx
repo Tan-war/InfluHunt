@@ -12,6 +12,11 @@ import Privacy from './pages/Privacy.jsx'
 import Profile from './pages/Profile.jsx'
 import Notifications from './pages/Notifications.jsx'
 import Chat from './pages/Chat.jsx'
+import Welcome from './pages/Welcome.jsx'
+import RecruiterProfile from './pages/recruiter/RecruiterProfile.jsx'
+import MyJobs from './pages/recruiter/MyJobs.jsx'
+import PostJob from './pages/recruiter/PostJob.jsx'
+import FindTalent from './pages/recruiter/FindTalent.jsx'
 import NotFound from './pages/NotFound.jsx'
 
 export default function App() {
@@ -34,10 +39,18 @@ export default function App() {
             <Route path="/sign-in" element={<Navigate to={`/login${search}`} replace />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
-            <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+            <Route path="/welcome" element={<RequireAuth allowNoRole><Welcome /></RequireAuth>} />
+            <Route path="/profile" element={<RequireAuth role="applicant"><Profile /></RequireAuth>} />
             <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
             <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
             <Route path="/chat/:conversationId" element={<RequireAuth><Chat /></RequireAuth>} />
+            {/* Recruiter side: recruiters only; posting, applicants and talent need a finished profile. */}
+            <Route path="/recruiter/onboarding" element={<RequireAuth role="recruiter"><RecruiterProfile onboarding /></RequireAuth>} />
+            <Route path="/recruiter/profile" element={<RequireAuth role="recruiter"><RecruiterProfile /></RequireAuth>} />
+            <Route path="/recruiter/jobs" element={<RequireAuth role="recruiter" needsRecruiterProfile><MyJobs /></RequireAuth>} />
+            <Route path="/recruiter/jobs/new" element={<RequireAuth role="recruiter" needsRecruiterProfile><PostJob /></RequireAuth>} />
+            <Route path="/recruiter/talent" element={<RequireAuth role="recruiter" needsRecruiterProfile><FindTalent /></RequireAuth>} />
+            <Route path="/recruiter/*" element={<RequireAuth role="recruiter"><NotFound /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </ErrorBoundary>

@@ -7,4 +7,6 @@ export function safeNext(next) {
 }
 
 // Builds /login?next=<path>, encoding the path so its own query (e.g. ?apply=1) survives.
-export const loginPath = (next) => `/login?next=${encodeURIComponent(safeNext(next))}`
+// intent ('applicant' | 'recruiter') gives a brand-new account its role straight away.
+export const loginPath = (next, intent) =>
+  `/login?next=${encodeURIComponent(safeNext(next))}${intent ? `&intent=${intent}` : ''}`

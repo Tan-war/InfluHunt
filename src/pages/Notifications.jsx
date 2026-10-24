@@ -6,7 +6,7 @@ import { useAuth } from '../lib/auth.jsx'
 
 export default function Notifications() {
   useStorageUpdates()
-  const { user } = useAuth() // this page sits behind RequireAuth
+  const { user, role } = useAuth() // this page sits behind RequireAuth
 
   // Opening this page marks every "Liked" item as seen.
   useEffect(() => {
@@ -24,6 +24,16 @@ export default function Notifications() {
   // TEST ONLY: uses the most recently applied job.
   const latestApplication = [...applications].sort((a, b) => b.appliedOn.localeCompare(a.appliedOn))[0]
   const latestJob = latestApplication && jobs.find((j) => j.id === latestApplication.jobId)
+
+  // Recruiter notifications arrive in phase 6.
+  if (role === 'recruiter') {
+    return (
+      <div>
+        <h1 className="text-3xl font-semibold tracking-tight">Notifications</h1>
+        <p className="mt-10 text-center text-muted">You're all caught up.</p>
+      </div>
+    )
+  }
 
   return (
     <div>

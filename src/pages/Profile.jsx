@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CheckCircle2 } from 'lucide-react'
 import BackLink from '../components/BackLink.jsx'
 import Modal from '../components/Modal.jsx'
+import Toast, { useToast } from '../components/Toast.jsx'
 import ProfileForm from '../components/ProfileForm.jsx'
 import { btnPrimary, btnText } from '../components/ui.js'
 import { useAuth } from '../lib/auth.jsx'
@@ -16,7 +16,7 @@ export default function Profile() {
   // Behind RequireAuth, so the user and their profiles row have loaded.
   const { user, profile, refreshProfile } = useAuth()
   const [initial] = useState(() => rowToForm(profile, user))
-  const [toast, setToast] = useState(false)
+  const [toastVisible, showToast] = useToast()
   const [deleteStep, setDeleteStep] = useState(null) // null | 'confirm' | 'unavailable'
 
   const emailHint = user.app_metadata?.provider === 'google' ? 'Signed in with Google' : 'Signed in with email'
@@ -26,19 +26,13 @@ export default function Profile() {
   const next = params.get('next') ? safeNext(params.get('next')) : null
   const submitLabel = !next ? 'Save changes' : next.includes('apply=1') ? 'Save and apply' : 'Save and continue'
 
-  useEffect(() => {
-    if (!toast) return
-    const timer = setTimeout(() => setToast(false), 2500)
-    return () => clearTimeout(timer)
-  }, [toast])
-
   async function handleSubmit(fields) {
     if (!(await saveProfileRow(user.id, fields))) return false
     track('profile_completed', { first_time: !profile?.profile_completed })
     await refreshProfile()
     // Back to the job (which carries on applying because of ?apply=1) or onward.
     if (next) navigate(next, { replace: true })
-    else setToast(true)
+    else showToast()
     return true
   }
 
@@ -111,21 +105,7 @@ export default function Profile() {
         </Modal>
       )}
 
-      {/* "Saved" toast. Sits above the sticky save bar on phones. */}
-      <div
-        role="status"
-        aria-live="polite"
-        className={`pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center px-6 transition-opacity duration-200 ease-in-out sm:bottom-8 ${
-          toast ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
-        {toast && (
-          <span className="flex items-center gap-2 rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white shadow-lg">
-            <CheckCircle2 size={18} className="shrink-0" />
-            Saved
-          </span>
-        )}
-      </div>
+      <Toast show={toastVisible}>Saved</Toast>
     </div>
   )
 }

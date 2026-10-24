@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import BackLink from '../components/BackLink.jsx'
 import ChatList from '../components/chat/ChatList.jsx'
 import Conversation from '../components/chat/Conversation.jsx'
+import { btnPrimary } from '../components/ui.js'
 import { testTools } from '../lib/chat/chatService.js'
+import { useAuth } from '../lib/auth.jsx'
 
 function useMediaQuery(query) {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches)
@@ -37,6 +39,22 @@ const testBanner = testTools && (
 export default function Chat() {
   const { conversationId } = useParams()
   const isDesktop = useMediaQuery('(min-width: 768px)')
+  const { role } = useAuth()
+
+  // Test-mode chat is applicant-only; recruiter chat arrives in phase 5.
+  if (role === 'recruiter') {
+    return (
+      <div>
+        <h1 className="text-3xl font-semibold tracking-tight">Chats</h1>
+        <div className="mt-6 rounded-card bg-white px-6 py-10 text-center">
+          <p className="text-muted">No chats yet. Find talent and say hi.</p>
+          <Link to="/recruiter/talent" className={`${btnPrimary} mt-6`}>
+            Find talent
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   if (!isDesktop) {
     if (conversationId) return <Conversation key={conversationId} conversationId={conversationId} fullScreen banner={testBanner} />

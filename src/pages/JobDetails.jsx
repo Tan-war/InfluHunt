@@ -39,7 +39,7 @@ export default function JobDetails() {
   const navigate = useNavigate()
   const location = useLocation()
   const [params, setParams] = useSearchParams()
-  const { user, profile, loading } = useAuth()
+  const { user, role, profile, loading } = useAuth()
   const [modal, setModal] = useState(null) // null | 'success' | 'report'
   const job = jobs.find((j) => j.id === id)
 
@@ -54,6 +54,11 @@ export default function JobDetails() {
   // Waits until sign-in state is known; the flag is dropped so a refresh won't re-apply.
   useEffect(() => {
     if (loading || !job || params.get('apply') !== '1') return
+    // Recruiters can't apply: the apply flow sends them to their own home page.
+    if (role === 'recruiter') {
+      navigate('/recruiter/jobs', { replace: true })
+      return
+    }
     const rest = new URLSearchParams(params)
     rest.delete('apply')
     setParams(rest, { replace: true, state: location.state })
@@ -90,7 +95,10 @@ export default function JobDetails() {
     // Where to come back to so applying carries on automatically.
     const returnTo = `/jobs/${job.id}?apply=1`
     if (!user) {
-      navigate(loginPath(returnTo))
+      // A brand-new account signing in from here becomes an applicant.
+      navigate(loginPath(returnTo, 'applicant'))
+    } else if (!role) {
+      navigate(`/welcome?next=${encodeURIComponent(returnTo)}`)
     } else if (!profile?.profile_completed) {
       navigate(`/profile?next=${encodeURIComponent(returnTo)}`)
     } else {
@@ -197,14 +205,18 @@ export default function JobDetails() {
               {job.commitment} · {formatPay(job.pay)}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={applied || loading}
-            className={`${btnPrimary} shrink-0`}
-          >
-            {applied ? 'Applied' : 'Apply now'}
-          </button>
+          {role === 'recruiter' ? (
+            <p className="shrink-0 text-sm text-muted">Recruiter accounts can't apply.</p>
+          ) : (
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={applied || loading}
+              className={`${btnPrimary} shrink-0`}
+            >
+              {applied ? 'Applied' : 'Apply now'}
+            </button>
+          )}
         </div>
       </div>
 

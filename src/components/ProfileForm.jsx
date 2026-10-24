@@ -163,7 +163,8 @@ function resizeImage(file, maxSize = 256) {
 
 // group: the field holds several controls (chips, link list), so it gets a group
 // role labelled by the label text instead of a <label for>.
-function Field({ label, optional, hint, error, htmlFor, group, children }) {
+// Field, Counter, Section and chipClass are shared with the recruiter profile form.
+export function Field({ label, optional, hint, error, htmlFor, group, children }) {
   const labelId = useId()
   const labelClass = 'mb-1.5 block text-sm font-medium'
   const labelText = (
@@ -196,15 +197,15 @@ function Field({ label, optional, hint, error, htmlFor, group, children }) {
   )
 }
 
-function Counter({ length }) {
+export function Counter({ length, max = MAX_TEXT }) {
   return (
-    <p className={`mt-1 text-right text-[13px] ${length > MAX_TEXT ? 'text-red-600' : 'text-muted'}`}>
-      {length}/{MAX_TEXT}
+    <p className={`mt-1 text-right text-[13px] ${length > max ? 'text-red-600' : 'text-muted'}`}>
+      {length}/{max}
     </p>
   )
 }
 
-function Section({ title, children }) {
+export function Section({ title, children }) {
   return (
     <section className="border-t border-line pt-6 first:border-t-0 first:pt-0">
       <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
@@ -213,7 +214,7 @@ function Section({ title, children }) {
   )
 }
 
-const chipClass = (selected) =>
+export const chipClass = (selected) =>
   `rounded-full border px-4 py-2 text-sm transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-40 ${
     selected ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink hover:border-ink'
   }`
