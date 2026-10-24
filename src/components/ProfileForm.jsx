@@ -220,10 +220,11 @@ const chipClass = (selected) =>
 
 /**
  * The profile form used on /profile.
- * onSubmit(fields) should return true when saved, or false to show a save error.
- * sessionEmail: when set, the email is read-only (it comes from sign-in).
+ * onSubmit(fields) returns (or resolves to) true when saved, or false to show a save error.
+ * sessionEmail: when set, the email is read-only (it comes from sign-in); emailHint sits under it.
+ * onFirstEdit: called once, the first time the form is changed.
  */
-export default function ProfileForm({ initial, sessionEmail, submitLabel, onSubmit }) {
+export default function ProfileForm({ initial, sessionEmail, emailHint, submitLabel, onSubmit, onFirstEdit }) {
   const emailEditable = !sessionEmail
   const [values, setValues] = useState(() => toFormValues(initial, sessionEmail))
   const [baseline, setBaseline] = useState(values)
@@ -250,7 +251,18 @@ export default function ProfileForm({ initial, sessionEmail, submitLabel, onSubm
   const dirty = skillDraft.trim() !== '' || JSON.stringify(values) !== JSON.stringify(baseline)
   const dirtyRef = useRef(dirty)
   dirtyRef.current = dirty
-  const blocker = useBlocker(() => dirtyRef.current)
+  // While saving, leaving is expected (onSubmit may navigate once the save lands).
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+  const blocker = useBlocker(() => dirtyRef.current && !savingRef.current)
+
+  const startedRef = useRef(false)
+  useEffect(() => {
+    if (!dirty || startedRef.current) return
+    startedRef.current = true
+    onFirstEdit?.()
+  }, [dirty, onFirstEdit])
+
   useEffect(() => {
     if (!dirty) return
     const onBeforeUnload = (e) => {
@@ -305,8 +317,9 @@ export default function ProfileForm({ initial, sessionEmail, submitLabel, onSubm
     }
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
+    if (savingRef.current) return
     // A skill typed but not yet added with Enter still counts.
     const final = { ...values, skills: addSkill(skillDraft) }
     setSubmitted(true)
@@ -317,15 +330,22 @@ export default function ProfileForm({ initial, sessionEmail, submitLabel, onSubm
       )
       return
     }
-    // Clean before onSubmit, which may navigate away straight after saving.
-    dirtyRef.current = false
-    if (onSubmit(toProfile(final))) {
+    savingRef.current = true
+    setSaving(true)
+    let ok = false
+    try {
+      ok = await onSubmit(toProfile(final))
+    } catch (error) {
+      console.error('[InfluHunt] Saving the profile failed', error)
+    }
+    savingRef.current = false
+    setSaving(false)
+    if (ok) {
       const saved = { ...final, name: capitalise(final.name), location: capitalise(final.location) }
       setValues(saved)
       setBaseline(saved)
     } else {
-      dirtyRef.current = true
-      setSaveError("We couldn't save your profile on this device. Please try a smaller photo or try again.")
+      setSaveError("We couldn't save your profile. Check your connection and try again.")
     }
   }
 
@@ -575,7 +595,7 @@ export default function ProfileForm({ initial, sessionEmail, submitLabel, onSubm
             aria-invalid={!!errorFor('email')}
             className={`${inputClass(errorFor('email'))} read-only:bg-page read-only:text-muted`}
           />
-          {!emailEditable && <p className="mt-1.5 text-[13px] text-muted">Signed in with email</p>}
+          {!emailEditable && emailHint && <p className="mt-1.5 text-[13px] text-muted">{emailHint}</p>}
         </Field>
 
         <Field label="Photo" optional error={photoError} htmlFor={`${id}-photo`}>
@@ -654,8 +674,8 @@ export default function ProfileForm({ initial, sessionEmail, submitLabel, onSubm
           because the global overflow-x on html/body stops position: sticky from working);
           a normal footer from 640px up. The page adds bottom padding on phones to match. */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white/90 px-6 py-3 backdrop-blur sm:static sm:flex sm:justify-end sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-6 sm:backdrop-blur-none">
-        <button type="submit" className={`${btnPrimary} w-full sm:w-auto`}>
-          {submitLabel}
+        <button type="submit" disabled={saving} className={`${btnPrimary} w-full sm:w-auto`}>
+          {saving ? 'Saving…' : submitLabel}
         </button>
       </div>
 

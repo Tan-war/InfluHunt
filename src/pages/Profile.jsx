@@ -1,26 +1,30 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle2 } from 'lucide-react'
-import jobs from '../data/jobs.js'
 import BackLink from '../components/BackLink.jsx'
 import Modal from '../components/Modal.jsx'
 import ProfileForm from '../components/ProfileForm.jsx'
 import { btnPrimary, btnText } from '../components/ui.js'
-import { getProfile, getSessionEmail, isSignedIn, saveProfile, setPendingApply, signIn } from '../lib/storage.js'
+import { useAuth } from '../lib/auth.jsx'
+import { rowToForm, saveProfileRow } from '../lib/profiles.js'
+import { safeNext } from '../lib/redirect.js'
+import { track } from '../lib/analytics.js'
 
 export default function Profile() {
   const navigate = useNavigate()
-  const location = useLocation()
   const [params] = useSearchParams()
-  // Guests always start with an empty form; signed-in people see their saved profile.
-  const [initial] = useState(() => (isSignedIn() ? getProfile() : null))
-  const [sessionEmail] = useState(() => (isSignedIn() ? getSessionEmail() : ''))
+  // Behind RequireAuth, so the user and their profiles row have loaded.
+  const { user, profile, refreshProfile } = useAuth()
+  const [initial] = useState(() => rowToForm(profile, user))
   const [toast, setToast] = useState(false)
   const [deleteStep, setDeleteStep] = useState(null) // null | 'confirm' | 'unavailable'
 
-  // Set when Apply now sent the person here (/profile?apply=<jobId>). It lives in the
-  // URL, so it survives a reload or signing in on the way.
-  const applyJob = jobs.find((j) => j.id === params.get('apply'))
+  const emailHint = user.app_metadata?.provider === 'google' ? 'Signed in with Google' : 'Signed in with email'
+
+  // Where to go after saving: set by Apply now (/jobs/<id>?apply=1) or by first sign-in.
+  // Kept in the URL, so it survives a reload.
+  const next = params.get('next') ? safeNext(params.get('next')) : null
+  const submitLabel = !next ? 'Save changes' : next.includes('apply=1') ? 'Save and apply' : 'Save and continue'
 
   useEffect(() => {
     if (!toast) return
@@ -28,20 +32,13 @@ export default function Profile() {
     return () => clearTimeout(timer)
   }, [toast])
 
-  function handleSubmit(fields) {
-    // Merge over the stored profile so fields this form no longer shows are kept.
-    if (!saveProfile({ ...getProfile(), ...fields })) return false
-    // Creating a profile for the first time also signs the person in.
-    if (!isSignedIn()) signIn(fields.email)
-
-    if (applyJob) {
-      // Back to the job, which finishes applying (see JobDetails).
-      setPendingApply(applyJob.id)
-      if (location.state?.fromJob) navigate(-1)
-      else navigate(`/jobs/${applyJob.id}`, { replace: true })
-    } else {
-      setToast(true)
-    }
+  async function handleSubmit(fields) {
+    if (!(await saveProfileRow(user.id, fields))) return false
+    track('profile_completed', { first_time: !profile?.profile_completed })
+    await refreshProfile()
+    // Back to the job (which carries on applying because of ?apply=1) or onward.
+    if (next) navigate(next, { replace: true })
+    else setToast(true)
     return true
   }
 
@@ -65,13 +62,15 @@ export default function Profile() {
       <div className="mt-6 rounded-card bg-white p-6">
         <ProfileForm
           initial={initial}
-          sessionEmail={sessionEmail}
-          submitLabel={applyJob ? 'Save and apply' : 'Save changes'}
+          sessionEmail={user.email}
+          emailHint={emailHint}
+          submitLabel={submitLabel}
           onSubmit={handleSubmit}
+          onFirstEdit={() => track('profile_started')}
         />
       </div>
 
-      {initial && (
+      {profile?.profile_completed && (
         <div className="mt-8 text-center sm:text-left">
           <button
             type="button"

@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { btnPrimary, btnSecondary } from '../components/ui.js'
-import { isSignedIn } from '../lib/storage.js'
+import Spinner from '../components/Spinner.jsx'
+import { useAuth } from '../lib/auth.jsx'
 
 export default function Landing() {
   const [showComingSoon, setShowComingSoon] = useState(false)
+  const { user, loading } = useAuth()
 
   // Signed-in people go straight to their home page.
-  if (isSignedIn()) return <Navigate to="/find" replace />
+  if (loading) return <Spinner />
+  if (user) return <Navigate to="/find" replace />
 
   return (
     <div className="flex min-h-[calc(100vh-5rem)] flex-col items-center justify-center text-center">
@@ -23,7 +26,7 @@ export default function Landing() {
         <button type="button" onClick={() => setShowComingSoon(true)} className={btnSecondary}>
           Post an opportunity
         </button>
-        <Link to="/sign-in" className={btnSecondary}>
+        <Link to="/login" className={btnSecondary}>
           Sign in
         </Link>
       </div>

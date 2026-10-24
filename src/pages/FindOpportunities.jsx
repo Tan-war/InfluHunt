@@ -1,12 +1,15 @@
 import { useLayoutEffect, useState } from 'react'
-import { Link, useLocation, useNavigationType, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Search } from 'lucide-react'
 import jobs from '../data/jobs.js'
 import Modal from '../components/Modal.jsx'
 import ApplicationTracker from '../components/ApplicationTracker.jsx'
 import { btnPrimary } from '../components/ui.js'
 import { formatPay, formatWorkMode } from '../lib/format.js'
-import { getListScroll, hasApplied, saveListScroll } from '../lib/storage.js'
+import { getApplication, getListScroll, hasApplied, saveListScroll } from '../lib/storage.js'
+import { getOrCreateConversation } from '../lib/chat/chatService.js'
+import { track } from '../lib/analytics.js'
+import { useAuth } from '../lib/auth.jsx'
 
 // param is the URL query key, so searches and filters survive navigation and can be shared.
 const FILTERS = [
@@ -35,10 +38,25 @@ function matchesFilters(job, filters) {
 }
 
 export default function FindOpportunities() {
+  const { user } = useAuth()
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
   const filters = filtersFromParams(params)
   const [trackedJob, setTrackedJob] = useState(null) // job whose application pop-up is open
+  const [chatError, setChatError] = useState('')
+  const navigate = useNavigate()
+
+  // Opens this application's chat, creating it the first time.
+  async function openChat(job) {
+    setChatError('')
+    try {
+      const conversation = await getOrCreateConversation(getApplication(user.id, job.id)?.id)
+      track('chat_started_from_tracker', { conversation_id: conversation.id })
+      navigate(`/chat/${conversation.id}`)
+    } catch {
+      setChatError("Couldn't open the chat. Please try again.")
+    }
+  }
 
   const q = query.trim().toLowerCase()
   const results = jobs.filter(
@@ -177,7 +195,7 @@ export default function FindOpportunities() {
                 >
                   View details
                 </Link>
-                {hasApplied(job.id) && (
+                {user && hasApplied(user.id, job.id) && (
                   <button
                     type="button"
                     onClick={() => setTrackedJob(job)}
@@ -193,7 +211,14 @@ export default function FindOpportunities() {
       )}
 
       {trackedJob && (
-        <Modal title="Your application" onClose={() => setTrackedJob(null)} closeOnBackdrop>
+        <Modal
+          title="Your application"
+          onClose={() => {
+            setTrackedJob(null)
+            setChatError('')
+          }}
+          closeOnBackdrop
+        >
           <p className="font-medium">{trackedJob.role}</p>
           <p className="text-sm text-muted">
             {trackedJob.brandName} · {trackedJob.platform}
@@ -203,11 +228,12 @@ export default function FindOpportunities() {
           </div>
           {trackedJob.applicationStatus === 'shortlisted' && (
             <div className="mt-6 flex justify-center">
-              <Link to={`/chat/${trackedJob.recruiterId}`} className={`${btnPrimary} w-full sm:w-auto`}>
+              <button type="button" onClick={() => openChat(trackedJob)} className={`${btnPrimary} w-full sm:w-auto`}>
                 Chat with recruiter
-              </Link>
+              </button>
             </div>
           )}
+          {chatError && <p className="mt-3 text-center text-sm text-red-600">{chatError}</p>}
         </Modal>
       )}
     </div>

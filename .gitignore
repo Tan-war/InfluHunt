@@ -1,3 +1,8 @@
 node_modules
 dist
 .DS_Store
+
+# Local env files: Supabase URL and keys stay on this machine.
+.env
+.env.local
+.env.*.local
