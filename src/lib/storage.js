@@ -2,15 +2,16 @@
 // try/catch so a blocked or full localStorage never crashes the page.
 import { useEffect, useState } from 'react'
 
+// Sign-in and the profile live in Supabase now (see lib/auth.jsx). What's left here is
+// mock data, kept per signed-in user (keys end in .<userId>).
 const KEYS = {
-  profile: 'influhunt.profile',
-  session: 'influhunt.session',
   applications: 'influhunt.applications',
   likes: 'influhunt.likes',
   reports: 'influhunt.reports',
   listScroll: 'influhunt.listScroll',
-  pendingApply: 'influhunt.pendingApply',
+  chat: 'influhunt.chat',
 }
+const forUser = (key, userId) => `${key}.${userId}`
 const CHANGE_EVENT = 'influhunt:storage'
 
 function read(key, fallback) {
@@ -33,42 +34,64 @@ function write(key, value) {
   }
 }
 
+// Calls onChange whenever stored data changes, in this tab or another. Returns an unsubscribe.
+export function onStorageChange(onChange) {
+  window.addEventListener(CHANGE_EVENT, onChange)
+  window.addEventListener('storage', onChange)
+  return () => {
+    window.removeEventListener(CHANGE_EVENT, onChange)
+    window.removeEventListener('storage', onChange)
+  }
+}
+
 // Re-render the calling component whenever stored data changes (this tab or another).
 export function useStorageUpdates() {
   const [, setTick] = useState(0)
-  useEffect(() => {
-    const bump = () => setTick((t) => t + 1)
-    window.addEventListener(CHANGE_EVENT, bump)
-    window.addEventListener('storage', bump)
-    return () => {
-      window.removeEventListener(CHANGE_EVENT, bump)
-      window.removeEventListener('storage', bump)
+  useEffect(() => onStorageChange(() => setTick((t) => t + 1)), [])
+}
+
+// Applications: [{ id, jobId, appliedOn, sample? }]. id is a UUID, as a database row will
+// have; sample marks ones the test chats created (see lib/chat/mockAdapter.js).
+export function getApplications(userId) {
+  if (!userId) return []
+  const key = forUser(KEYS.applications, userId)
+  const applications = read(key, [])
+  // Older entries were saved without an id: give them one. Saved quietly (no change
+  // event), since this can run while a component renders.
+  if (applications.some((a) => !a.id)) {
+    const withIds = applications.map((a) => (a.id ? a : { ...a, id: crypto.randomUUID() }))
+    try {
+      localStorage.setItem(key, JSON.stringify(withIds))
+    } catch {
+      // Ignore: ids are added again next time.
     }
-  }, [])
+    return withIds
+  }
+  return applications
+}
+export const getApplication = (userId, jobId) => getApplications(userId).find((a) => a.jobId === jobId) ?? null
+export const hasApplied = (userId, jobId) => getApplication(userId, jobId) !== null
+export function recordApplication(userId, jobId, { sample = false } = {}) {
+  if (hasApplied(userId, jobId)) return true
+  const application = { id: crypto.randomUUID(), jobId, appliedOn: new Date().toISOString() }
+  if (sample) application.sample = true
+  return write(forUser(KEYS.applications, userId), [...getApplications(userId), application])
+}
+export function removeSampleApplications(userId) {
+  return write(
+    forUser(KEYS.applications, userId),
+    getApplications(userId).filter((a) => !a.sample),
+  )
 }
 
-// Profile (one per device for now)
-export const getProfile = () => read(KEYS.profile, null)
-export const saveProfile = (profile) => write(KEYS.profile, profile)
-
-// Signed-in state
-export const isSignedIn = () => read(KEYS.session, null)?.signedIn === true
-export const getSessionEmail = () => read(KEYS.session, null)?.email ?? ''
-export const signIn = (email) => write(KEYS.session, { signedIn: true, email })
-export const signOut = () => write(KEYS.session, null)
-
-// Applications: [{ jobId, appliedOn }]
-export const getApplications = () => read(KEYS.applications, [])
-export const hasApplied = (jobId) => getApplications().some((a) => a.jobId === jobId)
-export function recordApplication(jobId) {
-  if (hasApplied(jobId)) return true
-  return write(KEYS.applications, [...getApplications(), { jobId, appliedOn: new Date().toISOString() }])
-}
+// Test-mode chat data, one blob per user: { seeded, conversations: [], messages: [] }.
+// Only lib/chat/mockAdapter.js uses these.
+export const getChatData = (userId) => read(forUser(KEYS.chat, userId), null)
+export const saveChatData = (userId, data) => write(forUser(KEYS.chat, userId), data)
 
 // Recruiter likes: [{ id, jobId, brandName, role, hrEmail, date, seen }]
-export const getLikes = () => read(KEYS.likes, [])
-export const hasUnseenLikes = () => getLikes().some((like) => !like.seen)
-export function addLike({ jobId, brandName, role, hrEmail }) {
+export const getLikes = (userId) => (userId ? read(forUser(KEYS.likes, userId), []) : [])
+export function addLike(userId, { jobId, brandName, role, hrEmail }) {
   const like = {
     id: `${Date.now()}`,
     jobId,
@@ -78,11 +101,11 @@ export function addLike({ jobId, brandName, role, hrEmail }) {
     date: new Date().toISOString(),
     seen: false,
   }
-  return write(KEYS.likes, [...getLikes(), like])
+  return write(forUser(KEYS.likes, userId), [...getLikes(userId), like])
 }
-export function markLikesSeen() {
-  const likes = getLikes()
-  if (likes.some((like) => !like.seen)) write(KEYS.likes, likes.map((like) => ({ ...like, seen: true })))
+export function markLikesSeen(userId) {
+  const likes = getLikes(userId)
+  if (likes.some((like) => !like.seen)) write(forUser(KEYS.likes, userId), likes.map((like) => ({ ...like, seen: true })))
 }
 
 // Listing reports: [{ jobId, reason, note, reportedAt }]. Local only until there is a backend.
@@ -110,21 +133,3 @@ export function saveListScroll(search, y) {
   }
 }
 
-// "Save and apply": the profile page leaves the job id here, and the job page
-// picks it up once (then clears it) to finish applying. This tab only.
-export function setPendingApply(jobId) {
-  try {
-    sessionStorage.setItem(KEYS.pendingApply, jobId)
-  } catch {
-    // Ignore: the person can still tap Apply now again.
-  }
-}
-export function takePendingApply() {
-  try {
-    const jobId = sessionStorage.getItem(KEYS.pendingApply)
-    sessionStorage.removeItem(KEYS.pendingApply)
-    return jobId
-  } catch {
-    return null
-  }
-}

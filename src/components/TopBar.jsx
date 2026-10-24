@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { MessageCircle, Sparkles, User } from 'lucide-react'
-import { isSignedIn, signOut, useStorageUpdates } from '../lib/storage.js'
+import { MessageCircle, Sparkles } from 'lucide-react'
+import Avatar from './Avatar.jsx'
+import { btnPrimary } from './ui.js'
+import { useAuth } from '../lib/auth.jsx'
+import { loginPath } from '../lib/redirect.js'
+import { useUnreadCount } from '../lib/chat/useUnreadCount.js'
 
 const menuItemClass =
   'block w-full rounded-input px-3 py-2 text-left text-base text-ink transition-colors duration-200 ease-in-out hover:bg-page'
 
-function ProfileMenu({ signedIn }) {
+function ProfileMenu() {
+  const { user, profile, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const navigate = useNavigate()
@@ -40,9 +45,13 @@ function ProfileMenu({ signedIn }) {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-page text-muted transition-colors duration-200 ease-in-out hover:text-ink"
+        className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-line bg-page transition-colors duration-200 ease-in-out hover:border-ink"
       >
-        <User size={22} strokeWidth={1.75} />
+        <Avatar
+          url={profile?.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture}
+          name={profile?.full_name || user.user_metadata?.full_name || user.email || ''}
+          className="h-full w-full"
+        />
       </button>
 
       {open && (
@@ -50,33 +59,21 @@ function ProfileMenu({ signedIn }) {
           role="menu"
           className="absolute right-0 top-full mt-2 w-48 rounded-card border border-line bg-white p-1.5 shadow-lg"
         >
-          {signedIn ? (
-            <>
-              <Link role="menuitem" to="/profile" className={menuItemClass}>
-                Edit profile
-              </Link>
-              <button
-                role="menuitem"
-                type="button"
-                onClick={() => {
-                  signOut()
-                  navigate('/')
-                }}
-                className={menuItemClass}
-              >
-                Sign out
-              </button>
-            </>
-          ) : (
-            <>
-              <Link role="menuitem" to="/profile" className={menuItemClass}>
-                Create profile
-              </Link>
-              <Link role="menuitem" to="/sign-in" className={menuItemClass}>
-                Sign in
-              </Link>
-            </>
-          )}
+          <Link role="menuitem" to="/profile" className={menuItemClass}>
+            My profile
+          </Link>
+          <button
+            role="menuitem"
+            type="button"
+            onClick={async () => {
+              await signOut()
+              // replace: a protected page may already have redirected to /login on sign-out.
+              navigate('/', { replace: true })
+            }}
+            className={menuItemClass}
+          >
+            Sign out
+          </button>
         </div>
       )}
     </div>
@@ -84,8 +81,9 @@ function ProfileMenu({ signedIn }) {
 }
 
 export default function TopBar() {
-  useStorageUpdates()
-  const signedIn = isSignedIn()
+  const { user, loading } = useAuth()
+  const { pathname, search } = useLocation()
+  const unread = useUnreadCount(user?.id)
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-white/80 backdrop-blur">
@@ -98,16 +96,33 @@ export default function TopBar() {
           INFLUHUNT
         </Link>
         <div className="flex items-center gap-3">
-          {signedIn && (
-            <Link
-              to="/chat"
-              aria-label="Chat"
-              className="relative flex h-11 w-11 items-center justify-center rounded-full text-ink transition-colors duration-200 ease-in-out hover:bg-page"
-            >
-              <MessageCircle size={24} strokeWidth={1.75} />
-            </Link>
+          {loading ? (
+            // Placeholder while sign-in state loads, so the logged-out UI doesn't flash.
+            <span className="h-11 w-11 rounded-full bg-page" aria-hidden="true" />
+          ) : user ? (
+            <>
+              <Link
+                to="/chat"
+                aria-label={unread > 0 ? `Chat, ${unread} unread` : 'Chat'}
+                className="relative flex h-11 w-11 items-center justify-center rounded-full text-ink transition-colors duration-200 ease-in-out hover:bg-page"
+              >
+                <MessageCircle size={24} strokeWidth={1.75} />
+                {unread > 0 && (
+                  <span className="absolute right-0.5 top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-white">
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                )}
+              </Link>
+              <ProfileMenu />
+            </>
+          ) : (
+            pathname !== '/login' &&
+            pathname !== '/auth/callback' && (
+              <Link to={loginPath(pathname + search)} className={`${btnPrimary} px-5 py-2 text-sm`}>
+                Sign in
+              </Link>
+            )
           )}
-          <ProfileMenu signedIn={signedIn} />
         </div>
       </div>
     </header>

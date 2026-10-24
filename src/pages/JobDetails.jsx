@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ExternalLink, Flag } from 'lucide-react'
 import jobs from '../data/jobs.js'
 import Modal from '../components/Modal.jsx'
 import ReportListingModal from '../components/ReportListingModal.jsx'
 import { btnPrimary, btnSecondary } from '../components/ui.js'
 import { formatDaysAgo, formatLocation, formatPay, formatShortDate } from '../lib/format.js'
-import { getProfile, hasApplied, isSignedIn, recordApplication, takePendingApply, useStorageUpdates } from '../lib/storage.js'
+import { hasApplied, recordApplication, useStorageUpdates } from '../lib/storage.js'
+import { useAuth } from '../lib/auth.jsx'
+import { loginPath } from '../lib/redirect.js'
 
 const linkClass = 'text-accent transition-opacity duration-200 ease-in-out hover:opacity-80'
 
@@ -36,6 +38,8 @@ export default function JobDetails() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const [params, setParams] = useSearchParams()
+  const { user, profile, loading } = useAuth()
   const [modal, setModal] = useState(null) // null | 'success' | 'report'
   const job = jobs.find((j) => j.id === id)
 
@@ -46,12 +50,17 @@ export default function JobDetails() {
     window.scrollTo(0, 0)
   }, [id])
 
-  // Back from "Save and apply" on the profile page: finish applying.
+  // ?apply=1: back from sign-in (and the profile, if it was new), so carry on applying.
+  // Waits until sign-in state is known; the flag is dropped so a refresh won't re-apply.
   useEffect(() => {
-    if (job && takePendingApply() === job.id) handleApply()
-    // Only on arrival.
+    if (loading || !job || params.get('apply') !== '1') return
+    const rest = new URLSearchParams(params)
+    rest.delete('apply')
+    setParams(rest, { replace: true, state: location.state })
+    if (!user || !hasApplied(user.id, job.id)) handleApply()
+    // Only when the flag is seen once sign-in state has loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [loading, id])
 
   // Came from the listings page: step back in history so its search, filters and
   // scroll position come back exactly as left (same as the browser back button).
@@ -75,16 +84,19 @@ export default function JobDetails() {
     )
   }
 
-  const applied = hasApplied(job.id)
+  const applied = user ? hasApplied(user.id, job.id) : false
 
   function handleApply() {
-    if (isSignedIn() && getProfile()) {
-      // Signed in with a profile: send it straight to the recruiter.
-      recordApplication(job.id)
-      setModal('success')
+    // Where to come back to so applying carries on automatically.
+    const returnTo = `/jobs/${job.id}?apply=1`
+    if (!user) {
+      navigate(loginPath(returnTo))
+    } else if (!profile?.profile_completed) {
+      navigate(`/profile?next=${encodeURIComponent(returnTo)}`)
     } else {
-      // No profile yet: fill it in first. The job id rides along in the URL.
-      navigate(`/profile?apply=${job.id}`, { state: { fromJob: true } })
+      // Signed in with a complete profile: send it straight to the recruiter.
+      recordApplication(user.id, job.id)
+      setModal('success')
     }
   }
 
@@ -188,7 +200,7 @@ export default function JobDetails() {
           <button
             type="button"
             onClick={handleApply}
-            disabled={applied}
+            disabled={applied || loading}
             className={`${btnPrimary} shrink-0`}
           >
             {applied ? 'Applied' : 'Apply now'}

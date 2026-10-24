@@ -2,21 +2,23 @@ import { useEffect } from 'react'
 import jobs from '../data/jobs.js'
 import { formatDate } from '../lib/format.js'
 import { addLike, getApplications, getLikes, markLikesSeen, useStorageUpdates } from '../lib/storage.js'
+import { useAuth } from '../lib/auth.jsx'
 
 export default function Notifications() {
   useStorageUpdates()
+  const { user } = useAuth() // this page sits behind RequireAuth
 
   // Opening this page marks every "Liked" item as seen.
   useEffect(() => {
-    markLikesSeen()
-  }, [])
+    markLikesSeen(user.id)
+  }, [user.id])
 
-  const applications = getApplications()
+  const applications = getApplications(user.id)
   const items = [
     ...applications
       .map((a) => ({ type: 'applied', key: `applied-${a.jobId}`, date: a.appliedOn, job: jobs.find((j) => j.id === a.jobId) }))
       .filter((item) => item.job),
-    ...getLikes().map((like) => ({ type: 'liked', key: `liked-${like.id}`, date: like.date, like })),
+    ...getLikes(user.id).map((like) => ({ type: 'liked', key: `liked-${like.id}`, date: like.date, like })),
   ].sort((a, b) => b.date.localeCompare(a.date))
 
   // TEST ONLY: uses the most recently applied job.
@@ -66,7 +68,7 @@ export default function Notifications() {
           type="button"
           disabled={!latestJob}
           onClick={() =>
-            addLike({
+            addLike(user.id, {
               jobId: latestJob.id,
               brandName: latestJob.brandName,
               role: latestJob.role,

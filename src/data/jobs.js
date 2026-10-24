@@ -171,6 +171,7 @@ const jobs = [
     recruiterId: 'fable-frames',
     postedAt: '2026-10-16',
     applyBy: '2026-10-25',
+    applicationStatus: 'shortlisted',
     description:
       'Lead camera and lighting on a monthly short-film series. You will plan shots with the director and manage a small crew on set.',
     learnings: [],
