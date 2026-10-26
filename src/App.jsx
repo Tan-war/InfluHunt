@@ -18,6 +18,7 @@ import MyJobs from './pages/recruiter/MyJobs.jsx'
 import PostJob from './pages/recruiter/PostJob.jsx'
 import FindTalent from './pages/recruiter/FindTalent.jsx'
 import JobApplicants from './pages/recruiter/JobApplicants.jsx'
+import CandidateProfile from './pages/recruiter/CandidateProfile.jsx'
 import RecruiterPublicProfile from './pages/RecruiterPublicProfile.jsx'
 import NotFound from './pages/NotFound.jsx'
 
@@ -54,6 +55,7 @@ export default function App() {
             <Route path="/recruiter/jobs/new" element={<RequireAuth role="recruiter" needsRecruiterProfile><PostJob /></RequireAuth>} />
             <Route path="/recruiter/jobs/:id/edit" element={<RequireAuth role="recruiter" needsRecruiterProfile><PostJob /></RequireAuth>} />
             <Route path="/recruiter/jobs/:id/applicants" element={<RequireAuth role="recruiter" needsRecruiterProfile><JobApplicants /></RequireAuth>} />
+            <Route path="/recruiter/candidates/:userId" element={<RequireAuth role="recruiter" needsRecruiterProfile><CandidateProfile /></RequireAuth>} />
             <Route path="/recruiter/talent" element={<RequireAuth role="recruiter" needsRecruiterProfile><FindTalent /></RequireAuth>} />
             <Route path="/recruiter/*" element={<RequireAuth role="recruiter"><NotFound /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />

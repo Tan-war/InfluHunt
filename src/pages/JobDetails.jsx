@@ -1,14 +1,16 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ExternalLink, Flag } from 'lucide-react'
+import ApplicationTracker from '../components/ApplicationTracker.jsx'
 import Avatar from '../components/Avatar.jsx'
 import Modal from '../components/Modal.jsx'
 import Spinner from '../components/Spinner.jsx'
 import ReportListingModal from '../components/ReportListingModal.jsx'
-import { btnPrimary, btnSecondary } from '../components/ui.js'
+import { btnPrimary, btnSecondary, btnText, inputClass } from '../components/ui.js'
+import { Counter } from '../components/ProfileForm.jsx'
 import { formatDaysAgo, formatDeadline } from '../lib/format.js'
 import { fetchJob, formatJobLocation, formatJobPay, isJobOpen, jobTypeLabel } from '../lib/jobs.js'
-import { hasApplied, recordApplication, useStorageUpdates } from '../lib/storage.js'
+import { MAX_PITCH, applyToJob, fetchMyApplication } from '../lib/applications.js'
 import { useAuth } from '../lib/auth.jsx'
 import { loginPath } from '../lib/redirect.js'
 
@@ -36,13 +38,17 @@ function Chips({ items }) {
 }
 
 export default function JobDetails() {
-  useStorageUpdates()
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const { user, role, profile, loading } = useAuth()
-  const [modal, setModal] = useState(null) // null | 'success' | 'report'
+  const [modal, setModal] = useState(null) // null | 'apply' | 'success' | 'tracker' | 'report'
+  const [pitch, setPitch] = useState('')
+  const [sending, setSending] = useState(false)
+  const [applyError, setApplyError] = useState('')
+  // The signed-in applicant's application to this job: undefined while loading, null if none.
+  const [myApplication, setMyApplication] = useState(undefined)
   const [job, setJob] = useState(undefined) // undefined: loading; null: not found
 
   useEffect(() => {
@@ -63,10 +69,25 @@ export default function JobDetails() {
     window.scrollTo(0, 0)
   }, [id])
 
+  useEffect(() => {
+    if (loading) return
+    if (role !== 'applicant' || !job) {
+      setMyApplication(null)
+      return
+    }
+    let active = true
+    fetchMyApplication(job.id)
+      .then((row) => active && setMyApplication(row))
+      .catch(() => active && setMyApplication(null))
+    return () => {
+      active = false
+    }
+  }, [loading, role, job])
+
   // ?apply=1: back from sign-in (and the profile, if it was new), so carry on applying.
   // Waits until sign-in state is known; the flag is dropped so a refresh won't re-apply.
   useEffect(() => {
-    if (loading || !job || params.get('apply') !== '1') return
+    if (loading || !job || myApplication === undefined || params.get('apply') !== '1') return
     // Recruiters can't apply: the apply flow sends them to their own home page.
     if (role === 'recruiter') {
       navigate('/recruiter/jobs', { replace: true })
@@ -75,10 +96,10 @@ export default function JobDetails() {
     const rest = new URLSearchParams(params)
     rest.delete('apply')
     setParams(rest, { replace: true, state: location.state })
-    if (isJobOpen(job) && (!user || !hasApplied(user.id, job.id))) handleApply()
-    // Only when the flag is seen once sign-in state and the job have loaded.
+    if (isJobOpen(job) && !myApplication) handleApply()
+    // Only when the flag is seen once sign-in state, the job and any application have loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, id, job])
+  }, [loading, id, job, myApplication])
 
   // Came from the listings page: step back in history so its search, filters and
   // scroll position come back exactly as left (same as the browser back button).
@@ -104,7 +125,7 @@ export default function JobDetails() {
     )
   }
 
-  const applied = user ? hasApplied(user.id, job.id) : false
+  const applied = !!myApplication
   const open = isJobOpen(job)
   const learnings = (job.what_you_learn ?? '')
     .split('\n')
@@ -122,9 +143,30 @@ export default function JobDetails() {
     } else if (!profile?.profile_completed) {
       navigate(`/profile?next=${encodeURIComponent(returnTo)}`)
     } else {
-      // Signed in with a complete profile: send it straight to the recruiter.
-      recordApplication(user.id, job.id)
-      setModal('success')
+      // Signed in with a complete profile: one optional line, then it goes to the recruiter.
+      setApplyError('')
+      setModal('apply')
+    }
+  }
+
+  async function sendApplication(e) {
+    e.preventDefault()
+    if (sending || pitch.length > MAX_PITCH) return
+    setSending(true)
+    setApplyError('')
+    try {
+      const result = await applyToJob(user.id, job.id, pitch)
+      if (result === 'closed') {
+        setApplyError('Applications just closed for this job.')
+      } else {
+        setMyApplication(await fetchMyApplication(job.id))
+        setPitch('')
+        setModal('success')
+      }
+    } catch {
+      setApplyError("We couldn't send your application. Please try again.")
+    } finally {
+      setSending(false)
     }
   }
 
@@ -250,11 +292,11 @@ export default function JobDetails() {
           ) : (
             <button
               type="button"
-              onClick={handleApply}
-              disabled={applied || loading}
-              className={`${btnPrimary} shrink-0`}
+              onClick={applied ? () => setModal('tracker') : handleApply}
+              disabled={loading || (user && myApplication === undefined)}
+              className={`${applied ? btnSecondary : btnPrimary} shrink-0`}
             >
-              {applied ? 'Applied' : 'Apply now'}
+              {applied ? 'View application' : 'Apply now'}
             </button>
           )}
         </div>
@@ -268,6 +310,46 @@ export default function JobDetails() {
               Back to opportunities
             </button>
           </div>
+        </Modal>
+      )}
+
+      {modal === 'apply' && (
+        <Modal title={`Apply for ${job.title}`} onClose={() => setModal(null)}>
+          <form onSubmit={sendApplication} noValidate>
+            <label htmlFor="apply-pitch" className="mb-1.5 block text-sm font-medium">
+              Why you? <span className="font-normal text-muted">(one line, optional)</span>
+            </label>
+            <textarea
+              id="apply-pitch"
+              rows={2}
+              value={pitch}
+              onChange={(e) => setPitch(e.target.value)}
+              placeholder="e.g. I edit 20+ reels a month for a food page."
+              className={inputClass(pitch.length > MAX_PITCH)}
+            />
+            <Counter length={pitch.length} max={MAX_PITCH} />
+            <p className="mt-2 text-[13px] text-muted">The creator sees your profile with this line.</p>
+            {applyError && <p className="mt-3 text-sm text-red-600">{applyError}</p>}
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setModal(null)} className={btnText}>
+                Cancel
+              </button>
+              <button type="submit" disabled={sending || pitch.length > MAX_PITCH} className={btnPrimary}>
+                {sending ? 'Sending…' : 'Send application'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {modal === 'tracker' && myApplication && (
+        <Modal title="Your application" onClose={() => setModal(null)} closeOnBackdrop>
+          <p className="font-medium">{job.title}</p>
+          <p className="text-sm text-muted">{job.brand_name}</p>
+          <div className="mt-6">
+            <ApplicationTracker status={myApplication.status} />
+          </div>
+          {myApplication.pitch && <p className="mt-4 text-center text-sm text-muted">Your line: “{myApplication.pitch}”</p>}
         </Modal>
       )}
 

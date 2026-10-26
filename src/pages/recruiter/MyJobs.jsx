@@ -5,8 +5,9 @@ import Spinner from '../../components/Spinner.jsx'
 import Toast, { useToast } from '../../components/Toast.jsx'
 import { btnPrimary, btnSecondary, btnText } from '../../components/ui.js'
 import { useAuth } from '../../lib/auth.jsx'
-import { closeJob, fetchJobsByRecruiter, reopenJob } from '../../lib/jobs.js'
+import { closeJob, fetchJobsByRecruiter, jobTypeLabel, reopenJob } from '../../lib/jobs.js'
 import { formatDeadline } from '../../lib/format.js'
+import { fetchApplicantCounts } from '../../lib/applications.js'
 import { track } from '../../lib/analytics.js'
 
 const smallBtn = 'px-4 py-2 text-sm'
@@ -19,6 +20,7 @@ export default function MyJobs() {
   const location = useLocation()
   const navigate = useNavigate()
   const [jobs, setJobs] = useState(null)
+  const [counts, setCounts] = useState({})
   const [loadError, setLoadError] = useState(false)
   const [confirmClose, setConfirmClose] = useState(null) // job to close
   const [busyId, setBusyId] = useState(null)
@@ -28,8 +30,10 @@ export default function MyJobs() {
 
   const load = useCallback(async () => {
     try {
-      setJobs(await fetchJobsByRecruiter(user.id))
+      const list = await fetchJobsByRecruiter(user.id)
+      setJobs(list)
       setLoadError(false)
+      setCounts(await fetchApplicantCounts(list.map((job) => job.id)))
     } catch {
       setLoadError(true)
     }
@@ -110,12 +114,16 @@ export default function MyJobs() {
                 <p className="mt-2 text-sm text-muted">{brief(job.about_role)}</p>
                 <dl className="mt-4 space-y-1 text-sm">
                   <div>
-                    <dt className="inline text-muted">Apply by: </dt>
+                    <dt className="inline text-muted">Type: </dt>
+                    <dd className="inline">{jobTypeLabel(job.job_type)}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline text-muted">Closes on: </dt>
                     <dd className="inline">{formatDeadline(job.apply_by)}</dd>
                   </div>
                   <div>
-                    <dt className="inline text-muted">Contact: </dt>
-                    <dd className="inline break-all">{job.contact_email}</dd>
+                    <dt className="inline text-muted">Applicants: </dt>
+                    <dd className="inline">{counts[job.id] ?? 0}</dd>
                   </div>
                 </dl>
                 <div className="mt-5 flex flex-wrap gap-2">

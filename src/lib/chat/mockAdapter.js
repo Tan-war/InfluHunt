@@ -11,14 +11,7 @@
 // Every function is async, like a real network call.
 import jobs from '../../data/jobs.js'
 import { supabase } from '../supabaseClient.js'
-import {
-  getApplications,
-  getChatData,
-  onStorageChange,
-  recordApplication,
-  removeSampleApplications,
-  saveChatData,
-} from '../storage.js'
+import { getChatData, onStorageChange, saveChatData } from '../storage.js'
 import { MAX_MESSAGE_LENGTH, previewOf, shortlistNote } from './rules.js'
 
 const SAMPLE_REPLIES = [
@@ -86,8 +79,8 @@ function seed(userId) {
     ],
   ]
   jobs.filter(isShortlisted).forEach((job, i) => {
-    recordApplication(userId, job.id, { sample: true })
-    const application = getApplications(userId).find((a) => a.jobId === job.id)
+    // Applications live in Supabase now; test chats just get a made-up application id.
+    const application = { id: crypto.randomUUID(), jobId: job.id }
     const script = scripts[i] ?? []
     const start = minutesAgo((script[0]?.[0] ?? 60) + 1)
     const conversation = newConversation(userId, application, job, start)
@@ -139,20 +132,13 @@ export async function getConversation(conversationId) {
   return conversation && conversation.applicant_id === userId ? conversation : null
 }
 
+// Test mode can only reopen a sample chat by its application id (real applications are in
+// Supabase, and chats move there in phase 5).
 export async function getOrCreateConversation(applicationId) {
   const userId = await currentUserId()
-  const application = getApplications(userId).find((a) => a.id === applicationId)
-  const job = jobs.find((j) => j.id === application?.jobId)
-  if (!application || !isShortlisted(job)) throw new Error('not_shortlisted')
-  const data = load(userId)
-  const existing = data.conversations.find((c) => c.application_id === applicationId)
-  if (existing) return existing
-  const at = now()
-  const conversation = newConversation(userId, application, job, at)
-  data.conversations.push(conversation)
-  addMessage(data, conversation, newMessage(conversation, null, 'system', shortlistNote(job.role), at))
-  save(userId, data)
-  return conversation
+  const existing = load(userId).conversations.find((c) => c.application_id === applicationId)
+  if (!existing) throw new Error('not_shortlisted')
+  return existing
 }
 
 // Oldest first. before: ISO time; only messages older than it. hasMore: older ones exist.
@@ -244,12 +230,10 @@ export async function simulateRecruiterReply(conversationId, { delayMs = 3000 } 
 
 export async function resetTestChats() {
   const userId = await currentUserId()
-  removeSampleApplications(userId)
   save(userId, { seeded: true, conversations: [], messages: [] })
 }
 
 export async function loadSampleChats() {
   const userId = await currentUserId()
-  removeSampleApplications(userId)
   save(userId, seed(userId))
 }

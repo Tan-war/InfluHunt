@@ -1,18 +1,34 @@
-import { Check } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 
-const STEPS = [
-  { key: 'applied', label: 'Applied', note: 'Your application has been sent.' },
-  { key: 'viewed', label: 'Viewed', note: 'The recruiter has checked out your application.' },
-  { key: 'shortlisted', label: 'Shortlisted', note: "You've been shortlisted! Say hi to the recruiter." },
-]
+// Status notes for each side. audience: 'applicant' (default) or 'recruiter'.
+const NOTES = {
+  applicant: {
+    applied: 'Your application has been sent.',
+    viewed: 'The recruiter has checked out your application.',
+    shortlisted: "You've been shortlisted! The creator may message you.",
+    not_selected: "This one didn't work out. Keep going, new gigs are added every week.",
+  },
+  recruiter: {
+    applied: 'New application.',
+    viewed: "You've seen this application.",
+    shortlisted: 'Shortlisted ✅',
+    not_selected: 'Marked as not selected.',
+  },
+}
 
 const CIRCLE = 32 // px
 
-// Three-step progress: Applied → Viewed → Shortlisted.
-export default function ApplicationTracker({ status }) {
+// Three-step progress: Applied → Viewed → Shortlisted (or Not selected).
+export default function ApplicationTracker({ status, audience = 'applicant' }) {
+  const notSelected = status === 'not_selected'
+  const STEPS = [
+    { key: 'applied', label: 'Applied' },
+    { key: 'viewed', label: 'Viewed' },
+    notSelected ? { key: 'not_selected', label: 'Not selected' } : { key: 'shortlisted', label: 'Shortlisted' },
+  ]
   const index = Math.max(0, STEPS.findIndex((step) => step.key === status))
-  // Shortlisted is the final step, so every step counts as done.
-  const current = status === 'shortlisted' ? STEPS.length : index
+  // The last step (Shortlisted or Not selected) ends it, so every step counts as done.
+  const current = index === STEPS.length - 1 ? STEPS.length : index
 
   return (
     <div>
@@ -20,6 +36,8 @@ export default function ApplicationTracker({ status }) {
         {STEPS.map((step, i) => {
           const done = i < current
           const isCurrent = i === current
+          // Not selected: the last step shows a grey cross instead of a tick.
+          const crossed = notSelected && i === STEPS.length - 1
           return (
             <li
               key={step.key}
@@ -40,7 +58,9 @@ export default function ApplicationTracker({ status }) {
               )}
               <span
                 className={`relative z-10 flex items-center justify-center rounded-full border-2 text-sm font-semibold ${
-                  done
+                  crossed
+                    ? 'border-muted bg-muted text-white'
+                    : done
                     ? 'border-ink bg-ink text-white'
                     : isCurrent
                       ? 'border-ink bg-white text-ink shadow-[0_0_0_4px_theme(colors.page)]'
@@ -48,7 +68,13 @@ export default function ApplicationTracker({ status }) {
                 }`}
                 style={{ width: CIRCLE, height: CIRCLE }}
               >
-                {done ? <Check size={16} strokeWidth={3} aria-hidden="true" /> : i + 1}
+                {crossed ? (
+                  <X size={16} strokeWidth={3} aria-hidden="true" />
+                ) : done ? (
+                  <Check size={16} strokeWidth={3} aria-hidden="true" />
+                ) : (
+                  i + 1
+                )}
               </span>
               <span className={`mt-2 text-sm ${isCurrent ? 'font-semibold text-ink' : done ? 'text-ink' : 'text-muted'}`}>
                 {step.label}
@@ -58,7 +84,7 @@ export default function ApplicationTracker({ status }) {
           )
         })}
       </ol>
-      <p className="mt-6 text-center text-muted">{STEPS[index].note}</p>
+      <p className="mt-6 text-center text-muted">{NOTES[audience][status] ?? NOTES[audience].applied}</p>
     </div>
   )
 }
