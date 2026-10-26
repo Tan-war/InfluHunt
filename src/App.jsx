@@ -17,6 +17,8 @@ import RecruiterProfile from './pages/recruiter/RecruiterProfile.jsx'
 import MyJobs from './pages/recruiter/MyJobs.jsx'
 import PostJob from './pages/recruiter/PostJob.jsx'
 import FindTalent from './pages/recruiter/FindTalent.jsx'
+import JobApplicants from './pages/recruiter/JobApplicants.jsx'
+import RecruiterPublicProfile from './pages/RecruiterPublicProfile.jsx'
 import NotFound from './pages/NotFound.jsx'
 
 export default function App() {
@@ -33,6 +35,7 @@ export default function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/find" element={<FindOpportunities />} />
             <Route path="/jobs/:id" element={<JobDetails />} />
+            <Route path="/recruiters/:id" element={<RecruiterPublicProfile />} />
             <Route path="/login" element={<Login />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             {/* Old email/password page: now Google sign-in. */}
@@ -49,6 +52,8 @@ export default function App() {
             <Route path="/recruiter/profile" element={<RequireAuth role="recruiter"><RecruiterProfile /></RequireAuth>} />
             <Route path="/recruiter/jobs" element={<RequireAuth role="recruiter" needsRecruiterProfile><MyJobs /></RequireAuth>} />
             <Route path="/recruiter/jobs/new" element={<RequireAuth role="recruiter" needsRecruiterProfile><PostJob /></RequireAuth>} />
+            <Route path="/recruiter/jobs/:id/edit" element={<RequireAuth role="recruiter" needsRecruiterProfile><PostJob /></RequireAuth>} />
+            <Route path="/recruiter/jobs/:id/applicants" element={<RequireAuth role="recruiter" needsRecruiterProfile><JobApplicants /></RequireAuth>} />
             <Route path="/recruiter/talent" element={<RequireAuth role="recruiter" needsRecruiterProfile><FindTalent /></RequireAuth>} />
             <Route path="/recruiter/*" element={<RequireAuth role="recruiter"><NotFound /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />

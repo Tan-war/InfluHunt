@@ -1,23 +1,36 @@
-import { useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Search } from 'lucide-react'
-import jobs from '../data/jobs.js'
 import Modal from '../components/Modal.jsx'
 import ApplicationTracker from '../components/ApplicationTracker.jsx'
 import { btnPrimary } from '../components/ui.js'
-import { formatPay, formatWorkMode } from '../lib/format.js'
+import Spinner from '../components/Spinner.jsx'
+import {
+  EXPERIENCE_LEVELS,
+  JOB_TYPES,
+  experienceLabel,
+  fetchOpenJobs,
+  formatJobLocation,
+  formatJobPay,
+  jobTypeLabel,
+} from '../lib/jobs.js'
 import { getApplication, getListScroll, hasApplied, saveListScroll } from '../lib/storage.js'
 import { getOrCreateConversation } from '../lib/chat/chatService.js'
 import { track } from '../lib/analytics.js'
 import { useAuth } from '../lib/auth.jsx'
 
 // param is the URL query key, so searches and filters survive navigation and can be shared.
+const LOCATION_FILTER = { Remote: 'remote', 'On-site': 'city', Hybrid: 'hybrid' }
 const FILTERS = [
-  { key: 'jobType', param: 'type', label: 'Job type', options: ['All', 'Full time', 'Part time', 'Freelance', 'Internship'] },
-  { key: 'experienceLevel', param: 'experience', label: 'Experience', options: ['All', 'Entry', 'Mid', 'Senior'] },
-  { key: 'workMode', param: 'mode', label: 'Work mode', options: ['All', 'WFH', 'WFO', 'Hybrid'] },
+  { key: 'jobType', param: 'type', label: 'Job type', options: ['All', ...JOB_TYPES.map((t) => t.label)] },
+  { key: 'experience', param: 'experience', label: 'Experience', options: ['All', ...EXPERIENCE_LEVELS.map((e) => e.label)] },
+  { key: 'location', param: 'mode', label: 'Location', options: ['All', ...Object.keys(LOCATION_FILTER)] },
   { key: 'pay', param: 'pay', label: 'Pay', options: ['All', 'Paid', 'Unpaid'] },
 ]
+
+// Last list fetched, so coming back to this page shows it straight away (and can restore
+// the scroll position) while a fresh copy loads.
+let cachedJobs = null
 
 function filtersFromParams(params) {
   return Object.fromEntries(
@@ -29,11 +42,11 @@ function filtersFromParams(params) {
 }
 
 function matchesFilters(job, filters) {
-  if (filters.jobType !== 'All' && job.jobType !== filters.jobType) return false
-  if (filters.experienceLevel !== 'All' && job.experienceLevel !== filters.experienceLevel) return false
-  if (filters.workMode !== 'All' && job.workMode !== filters.workMode) return false
-  if (filters.pay === 'Paid' && job.pay === 0) return false
-  if (filters.pay === 'Unpaid' && job.pay !== 0) return false
+  if (filters.jobType !== 'All' && jobTypeLabel(job.job_type) !== filters.jobType) return false
+  if (filters.experience !== 'All' && experienceLabel(job.experience_required) !== filters.experience) return false
+  if (filters.location !== 'All' && job.location_type !== LOCATION_FILTER[filters.location]) return false
+  if (filters.pay === 'Paid' && job.pay_type === 'unpaid') return false
+  if (filters.pay === 'Unpaid' && job.pay_type !== 'unpaid') return false
   return true
 }
 
@@ -45,6 +58,24 @@ export default function FindOpportunities() {
   const [trackedJob, setTrackedJob] = useState(null) // job whose application pop-up is open
   const [chatError, setChatError] = useState('')
   const navigate = useNavigate()
+  const [jobs, setJobs] = useState(cachedJobs)
+  const [loadError, setLoadError] = useState(false)
+
+  // Open jobs only: closed ones (by the recruiter, or past apply-by) never show here.
+  useEffect(() => {
+    let active = true
+    fetchOpenJobs()
+      .then((list) => {
+        cachedJobs = list
+        if (active) setJobs(list)
+      })
+      .catch(() => {
+        if (active && !cachedJobs) setLoadError(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Opens this application's chat, creating it the first time.
   async function openChat(job) {
@@ -59,10 +90,9 @@ export default function FindOpportunities() {
   }
 
   const q = query.trim().toLowerCase()
-  const results = jobs.filter(
+  const results = (jobs ?? []).filter(
     (job) =>
-      (job.role.toLowerCase().includes(q) || job.brandName.toLowerCase().includes(q)) &&
-      matchesFilters(job, filters),
+      (job.title.toLowerCase().includes(q) || job.brand_name.toLowerCase().includes(q)) && matchesFilters(job, filters),
   )
   const hasActiveFilter = Object.values(filters).some((value) => value !== 'All')
 
@@ -79,19 +109,25 @@ export default function FindOpportunities() {
   // Keep the scroll position, and restore it when coming back (Back link or browser back).
   const { search } = useLocation()
   const navigationType = useNavigationType()
+  const loaded = jobs !== null
+  const restoredRef = useRef(false)
   useLayoutEffect(() => {
+    // Once, as soon as the list is on screen; later search/filter changes keep the position.
+    if (!loaded || restoredRef.current) return
+    restoredRef.current = true
     const saved = getListScroll()
     if (navigationType === 'POP' && saved && saved.search === search) window.scrollTo(0, saved.y)
-    // Only on arrival; later search/filter changes keep the current position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  // Layout effect so the listener is gone before the next page resets its scroll.
+  }, [loaded])
+  // Layout effect so the listener is gone before the next page resets its scroll. Starts
+  // once the list has loaded, so the short loading page doesn't overwrite a saved position.
   useLayoutEffect(() => {
+    if (!loaded) return
     const onScroll = () => saveListScroll(search, window.scrollY)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [search])
+  }, [search, loaded])
 
   return (
     <div>
@@ -143,7 +179,7 @@ export default function FindOpportunities() {
 
       <div className="mt-4 flex items-center justify-between gap-4">
         <p className="text-sm text-muted">
-          Showing {results.length} {results.length === 1 ? 'opportunity' : 'opportunities'}
+          {loaded ? `Showing ${results.length} ${results.length === 1 ? 'opportunity' : 'opportunities'}` : ' '}
         </p>
         {hasActiveFilter && (
           <button
@@ -156,7 +192,13 @@ export default function FindOpportunities() {
         )}
       </div>
 
-      {results.length === 0 ? (
+      {loadError ? (
+        <p className="mt-10 text-center text-muted">Couldn't load opportunities. Please refresh to try again.</p>
+      ) : !loaded ? (
+        <Spinner label="Loading opportunities" />
+      ) : jobs.length === 0 ? (
+        <p className="mt-10 text-center text-muted">No opportunities yet. New gigs are added every week.</p>
+      ) : results.length === 0 ? (
         <p className="mt-10 text-center text-muted">No opportunities match. Try clearing a filter.</p>
       ) : (
         <ul className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -166,24 +208,28 @@ export default function FindOpportunities() {
               className="flex flex-col rounded-card bg-white p-5 transition duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-lg"
             >
               <div className="flex items-baseline gap-2">
-                <span className="truncate text-sm font-medium">{job.brandName}</span>
-                <span className="shrink-0 text-xs text-muted">{job.platform}</span>
+                <span className="truncate text-sm font-medium">{job.brand_name}</span>
+                {job.platforms[0] && <span className="shrink-0 text-xs text-muted">{job.platforms[0]}</span>}
               </div>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight">{job.role}</h2>
-              <p className="text-sm text-muted">{job.niche}</p>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight">{job.title}</h2>
+              {job.niche && <p className="text-sm text-muted">{job.niche}</p>}
 
               <dl className="mt-4 space-y-1 text-sm">
                 <div>
-                  <dt className="sr-only">Work mode</dt>
-                  <dd>{formatWorkMode(job)}</dd>
+                  <dt className="sr-only">Location</dt>
+                  <dd>{formatJobLocation(job)}</dd>
                 </div>
                 <div>
                   <dt className="sr-only">Job type</dt>
-                  <dd>{job.jobType}</dd>
+                  <dd>{jobTypeLabel(job.job_type)}</dd>
                 </div>
                 <div>
                   <dt className="sr-only">Pay</dt>
-                  <dd className="font-medium">{formatPay(job.pay)}</dd>
+                  <dd className="font-medium">{formatJobPay(job)}</dd>
+                </div>
+                <div>
+                  <dt className="sr-only">Contact email</dt>
+                  <dd className="break-all text-muted">{job.contact_email}</dd>
                 </div>
               </dl>
 
@@ -219,10 +265,8 @@ export default function FindOpportunities() {
           }}
           closeOnBackdrop
         >
-          <p className="font-medium">{trackedJob.role}</p>
-          <p className="text-sm text-muted">
-            {trackedJob.brandName} · {trackedJob.platform}
-          </p>
+          <p className="font-medium">{trackedJob.title}</p>
+          <p className="text-sm text-muted">{trackedJob.brand_name}</p>
           <div className="mt-6">
             <ApplicationTracker status={trackedJob.applicationStatus ?? 'applied'} />
           </div>

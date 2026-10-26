@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ExternalLink, Flag } from 'lucide-react'
-import jobs from '../data/jobs.js'
+import Avatar from '../components/Avatar.jsx'
 import Modal from '../components/Modal.jsx'
+import Spinner from '../components/Spinner.jsx'
 import ReportListingModal from '../components/ReportListingModal.jsx'
 import { btnPrimary, btnSecondary } from '../components/ui.js'
-import { formatDaysAgo, formatLocation, formatPay, formatShortDate } from '../lib/format.js'
+import { formatDaysAgo, formatDeadline } from '../lib/format.js'
+import { fetchJob, formatJobLocation, formatJobPay, isJobOpen, jobTypeLabel } from '../lib/jobs.js'
 import { hasApplied, recordApplication, useStorageUpdates } from '../lib/storage.js'
 import { useAuth } from '../lib/auth.jsx'
 import { loginPath } from '../lib/redirect.js'
@@ -41,7 +43,18 @@ export default function JobDetails() {
   const [params, setParams] = useSearchParams()
   const { user, role, profile, loading } = useAuth()
   const [modal, setModal] = useState(null) // null | 'success' | 'report'
-  const job = jobs.find((j) => j.id === id)
+  const [job, setJob] = useState(undefined) // undefined: loading; null: not found
+
+  useEffect(() => {
+    let active = true
+    setJob(undefined)
+    fetchJob(id)
+      .then((row) => active && setJob(row))
+      .catch(() => active && setJob(null))
+    return () => {
+      active = false
+    }
+  }, [id])
 
   // Open each listing at the top, not at the listings page's scroll position.
   // Braces matter: newer browsers return a Promise from scrollTo, and an effect
@@ -62,10 +75,10 @@ export default function JobDetails() {
     const rest = new URLSearchParams(params)
     rest.delete('apply')
     setParams(rest, { replace: true, state: location.state })
-    if (!user || !hasApplied(user.id, job.id)) handleApply()
-    // Only when the flag is seen once sign-in state has loaded.
+    if (isJobOpen(job) && (!user || !hasApplied(user.id, job.id))) handleApply()
+    // Only when the flag is seen once sign-in state and the job have loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, id])
+  }, [loading, id, job])
 
   // Came from the listings page: step back in history so its search, filters and
   // scroll position come back exactly as left (same as the browser back button).
@@ -77,6 +90,8 @@ export default function JobDetails() {
       navigate('/find')
     }
   }
+
+  if (job === undefined) return <Spinner label="Loading opportunity" />
 
   if (!job) {
     return (
@@ -90,6 +105,11 @@ export default function JobDetails() {
   }
 
   const applied = user ? hasApplied(user.id, job.id) : false
+  const open = isJobOpen(job)
+  const learnings = (job.what_you_learn ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
 
   function handleApply() {
     // Where to come back to so applying carries on automatically.
@@ -116,12 +136,16 @@ export default function JobDetails() {
       </Link>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="flex items-baseline gap-2">
-          <span className="font-medium">{job.brandName}</span>
-          <span className="text-sm text-muted">{job.platform}</span>
-        </p>
+        {/* Who's hiring: taps through to their public recruiter profile. */}
+        <Link to={`/recruiters/${job.recruiter_id}`} className="flex min-w-0 items-center gap-3">
+          <Avatar url={job.logo_url} name={job.brand_name} className="h-11 w-11 border border-line" />
+          <span className="min-w-0">
+            <span className="block truncate font-medium">{job.brand_name}</span>
+            <span className="block truncate text-sm text-muted">by {job.recruiter_name}</span>
+          </span>
+        </Link>
         <a
-          href={job.channelUrl}
+          href={job.primary_link}
           target="_blank"
           rel="noopener noreferrer"
           className={`${btnSecondary} gap-1.5 px-4 py-2 text-sm`}
@@ -131,40 +155,48 @@ export default function JobDetails() {
         </a>
       </div>
 
-      <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{job.role}</h1>
+      <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">{job.title}</h1>
       <ul className="mt-4 flex flex-wrap gap-2">
         <li className="rounded-full bg-ink px-3 py-1 text-sm font-medium text-white">
-          <span className="sr-only">Commitment: </span>
-          {job.commitment}
+          <span className="sr-only">Job type: </span>
+          {jobTypeLabel(job.job_type)}
         </li>
         <li className="rounded-full bg-white px-3 py-1 text-sm">
           <span className="sr-only">Pay: </span>
-          {formatPay(job.pay)}
+          {formatJobPay(job)}
         </li>
         <li className="rounded-full bg-white px-3 py-1 text-sm">
           <span className="sr-only">Location: </span>
-          {formatLocation(job)}
+          {formatJobLocation(job)}
         </li>
-        <li className="rounded-full bg-white px-3 py-1 text-sm">
-          <span className="sr-only">Niche: </span>
-          {job.niche}
-        </li>
+        {job.niche && (
+          <li className="rounded-full bg-white px-3 py-1 text-sm">
+            <span className="sr-only">Niche: </span>
+            {job.niche}
+          </li>
+        )}
       </ul>
       <p className="mt-3 pb-8 text-sm text-muted">
-        Posted {formatDaysAgo(job.postedAt)} · Apply by {formatShortDate(job.applyBy)}
+        Posted {formatDaysAgo(job.created_at)} ·{' '}
+        {open ? `Apply by ${formatDeadline(job.apply_by)}` : 'Applications closed'}
       </p>
 
       <Section title="About the role">
-        <p className="leading-relaxed">{job.description}</p>
+        <p className="whitespace-pre-line leading-relaxed">{job.about_role}</p>
       </Section>
 
-      {job.learnings?.length > 0 && (
+      {learnings.length > 0 && (
         <Section title="What you'll learn">
-          <ul className="list-disc space-y-1 pl-5 leading-relaxed">
-            {job.learnings.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
+          {/* One point per line, as the recruiter typed them. */}
+          {learnings.length === 1 ? (
+            <p className="leading-relaxed">{learnings[0]}</p>
+          ) : (
+            <ul className="list-disc space-y-1 pl-5 leading-relaxed">
+              {learnings.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          )}
         </Section>
       )}
 
@@ -180,8 +212,14 @@ export default function JobDetails() {
       </Section>
 
       {/* lucide-react has no Instagram/YouTube icons, so platforms are plain text. */}
-      <Section title="Platforms">
-        <p>{job.platformsInvolved.join(', ')}</p>
+      {job.platforms.length > 0 && (
+        <Section title="Platforms">
+          <p>{job.platforms.join(', ')}</p>
+        </Section>
+      )}
+
+      <Section title="Contact">
+        <p className="break-all">{job.contact_email}</p>
       </Section>
 
       <div className="border-t border-line pt-6">
@@ -199,14 +237,16 @@ export default function JobDetails() {
         <div className="mx-auto flex w-full max-w-content items-center gap-4 px-6 py-3">
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">
-              {job.role} · {job.brandName}
+              {job.title} · {job.brand_name}
             </p>
             <p className="truncate text-sm text-muted">
-              {job.commitment} · {formatPay(job.pay)}
+              {jobTypeLabel(job.job_type)} · {formatJobPay(job)}
             </p>
           </div>
           {role === 'recruiter' ? (
             <p className="shrink-0 text-sm text-muted">Recruiter accounts can't apply.</p>
+          ) : !open && !applied ? (
+            <p className="shrink-0 text-sm font-medium text-muted">Applications closed</p>
           ) : (
             <button
               type="button"
