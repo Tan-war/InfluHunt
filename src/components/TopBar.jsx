@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, MessageCircle, Sparkles, Users } from 'lucide-react'
+import { Bell, BriefcaseBusiness, MessageCircle, Plus, Sparkles, Users } from 'lucide-react'
 import Avatar from './Avatar.jsx'
 import { btnPrimary } from './ui.js'
 import { useAuth } from '../lib/auth.jsx'
@@ -10,6 +10,19 @@ import { useUnreadCount } from '../lib/chat/useUnreadCount.js'
 
 const iconLinkClass =
   'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition-colors duration-200 ease-in-out hover:bg-page'
+
+// Icon only on phones; with its label from 768px up.
+const navLinkClass =
+  'flex h-11 shrink-0 items-center gap-2 rounded-full px-2.5 text-ink transition-colors duration-200 ease-in-out hover:bg-page md:px-4'
+
+function NavLink({ to, label, Icon }) {
+  return (
+    <Link to={to} aria-label={label} className={navLinkClass}>
+      <Icon size={22} strokeWidth={1.75} />
+      <span className="hidden text-sm font-medium md:inline">{label}</span>
+    </Link>
+  )
+}
 
 const menuItemClass =
   'block w-full rounded-input px-3 py-2 text-left text-base text-ink transition-colors duration-200 ease-in-out hover:bg-page'
@@ -117,15 +130,15 @@ export default function TopBar() {
           ) : user ? (
             <>
               {isRecruiter && (
-                // Icon only on phones; with its label from 640px up.
-                <Link
-                  to="/recruiter/talent"
-                  aria-label="Find talent"
-                  className="flex h-11 shrink-0 items-center gap-2 rounded-full px-2.5 text-ink transition-colors duration-200 ease-in-out hover:bg-page sm:px-4"
-                >
-                  <Users size={22} strokeWidth={1.75} />
-                  <span className="hidden text-sm font-medium sm:inline">Find talent</span>
-                </Link>
+                <>
+                  <NavLink to="/recruiter/jobs" label="View jobs posted" Icon={BriefcaseBusiness} />
+                  {/* On Find talent itself, offer posting instead. */}
+                  {pathname === '/recruiter/talent' ? (
+                    <NavLink to="/recruiter/jobs/new" label="Post an opportunity" Icon={Plus} />
+                  ) : (
+                    <NavLink to="/recruiter/talent" label="Find talent" Icon={Users} />
+                  )}
+                </>
               )}
               <Link to="/chat" aria-label={unread > 0 ? `Chat, ${unread} unread` : 'Chat'} className={iconLinkClass}>
                 <MessageCircle size={24} strokeWidth={1.75} />
