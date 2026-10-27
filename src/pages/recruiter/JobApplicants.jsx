@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { MessageCircle } from 'lucide-react'
 import Avatar from '../../components/Avatar.jsx'
 import BackLink from '../../components/BackLink.jsx'
 import Spinner from '../../components/Spinner.jsx'
@@ -9,6 +10,7 @@ import { fetchJob } from '../../lib/jobs.js'
 import { STATUS_LABELS, fetchJobApplicants } from '../../lib/applications.js'
 import { STATUS_CHIP, formatCreatorType } from '../../lib/candidates.js'
 import { formatDate } from '../../lib/format.js'
+import { messagePath } from '../../lib/chat/chatService.js'
 import { track } from '../../lib/analytics.js'
 
 const FILTERS = ['all', 'applied', 'viewed', 'shortlisted', 'not_selected']
@@ -103,11 +105,11 @@ export default function JobApplicants() {
           ) : (
             <ul className="mt-4 divide-y divide-line overflow-hidden rounded-card bg-white">
               {shown.map((a) => (
-                <li key={a.application_id}>
+                <li key={a.application_id} className="flex items-center transition-colors duration-200 ease-in-out hover:bg-page">
                   <Link
                     to={`/recruiter/candidates/${a.applicant_id}?application=${a.application_id}`}
                     state={{ source: 'applicants' }}
-                    className="flex items-start gap-3 px-4 py-4 transition-colors duration-200 ease-in-out hover:bg-page"
+                    className="flex min-w-0 flex-1 items-start gap-3 py-4 pl-4 pr-2"
                   >
                     <Avatar url={a.avatar_url} name={a.full_name ?? ''} className="h-12 w-12" />
                     <span className="min-w-0 flex-1">
@@ -121,6 +123,13 @@ export default function JobApplicants() {
                       {a.pitch && <span className="mt-1 block text-sm">“{a.pitch}”</span>}
                       <span className="mt-1 block text-xs text-muted">Applied {formatDate(a.applied_at)}</span>
                     </span>
+                  </Link>
+                  <Link
+                    to={messagePath(a.applicant_id, job.id)}
+                    aria-label={`Message ${a.full_name ?? 'applicant'}`}
+                    className="mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition-colors duration-200 ease-in-out hover:bg-white"
+                  >
+                    <MessageCircle size={20} strokeWidth={1.75} />
                   </Link>
                 </li>
               ))}

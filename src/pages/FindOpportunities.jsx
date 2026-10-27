@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigationType, useSearchParams } from 'react-rou
 import { ChevronDown, Search } from 'lucide-react'
 import Modal from '../components/Modal.jsx'
 import ApplicationTracker from '../components/ApplicationTracker.jsx'
+import CreatorChatLink from '../components/chat/CreatorChatLink.jsx'
 import Spinner from '../components/Spinner.jsx'
 import {
   EXPERIENCE_LEVELS,
@@ -266,9 +267,7 @@ export default function FindOpportunities() {
           <div className="mt-6">
             <ApplicationTracker status={applications[trackedJob.id]?.status ?? 'applied'} />
           </div>
-          {applications[trackedJob.id]?.status === 'shortlisted' && (
-            <p className="mt-4 text-center text-sm text-muted">The creator will message you here if they'd like to talk.</p>
-          )}
+          <CreatorChatLink recruiterId={trackedJob.recruiter_id} status={applications[trackedJob.id]?.status} />
         </Modal>
       )}
     </div>

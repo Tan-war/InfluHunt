@@ -111,8 +111,7 @@ export default function TopBar() {
   const { user, role, loading } = useAuth()
   const { pathname, search } = useLocation()
   const isRecruiter = role === 'recruiter'
-  // Test-mode chat is applicant-only until recruiter chat arrives (phase 5).
-  const unread = useUnreadCount(role === 'applicant' ? user?.id : null)
+  const unread = useUnreadCount(role ? user?.id : null)
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-white/80 backdrop-blur">

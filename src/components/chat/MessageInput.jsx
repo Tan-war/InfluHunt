@@ -10,7 +10,8 @@ const MAX_HEIGHT = 4 * 24 + 20 // 4 lines of 24px text + vertical padding
 const isTouch = () => window.matchMedia('(pointer: coarse)').matches
 
 // onSend(text) returns false when the message was ignored (rate limit), so the text stays.
-export default function MessageInput({ onSend }) {
+// autoFocus: put the cursor in the box straight away (a new chat).
+export default function MessageInput({ onSend, placeholder = 'Message', autoFocus = false }) {
   const [value, setValue] = useState('')
   const [trayOpen, setTrayOpen] = useState(false)
   const textRef = useRef(null)
@@ -24,6 +25,10 @@ export default function MessageInput({ onSend }) {
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`
     el.style.overflowY = el.scrollHeight > MAX_HEIGHT ? 'auto' : 'hidden'
   }, [value])
+
+  useEffect(() => {
+    if (autoFocus) textRef.current?.focus()
+  }, [autoFocus])
 
   useEffect(() => {
     if (!trayOpen) return
@@ -96,7 +101,7 @@ export default function MessageInput({ onSend }) {
               send()
             }
           }}
-          placeholder="Message"
+          placeholder={placeholder}
           aria-label="Message"
           className="min-w-0 flex-1 resize-none rounded-[22px] border border-line bg-white px-4 py-2.5 text-base leading-6 text-ink outline-none transition-colors duration-200 ease-in-out placeholder:text-muted focus:border-accent"
         />

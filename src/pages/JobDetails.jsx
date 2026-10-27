@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ExternalLink, Flag } from 'lucide-react'
 import ApplicationTracker from '../components/ApplicationTracker.jsx'
+import CreatorChatLink from '../components/chat/CreatorChatLink.jsx'
 import Avatar from '../components/Avatar.jsx'
 import Modal from '../components/Modal.jsx'
 import Spinner from '../components/Spinner.jsx'
@@ -350,6 +351,7 @@ export default function JobDetails() {
             <ApplicationTracker status={myApplication.status} />
           </div>
           {myApplication.pitch && <p className="mt-4 text-center text-sm text-muted">Your line: “{myApplication.pitch}”</p>}
+          <CreatorChatLink recruiterId={job.recruiter_id} status={myApplication.status} />
         </Modal>
       )}
 

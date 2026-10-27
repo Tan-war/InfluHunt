@@ -17,6 +17,7 @@ import {
 import { STATUS_CHIP, firstName, formatCreatorType } from '../../lib/candidates.js'
 import { experienceLabel, fetchJob, jobTypeLabel } from '../../lib/jobs.js'
 import { formatDate } from '../../lib/format.js'
+import { messagePath } from '../../lib/chat/chatService.js'
 import { track } from '../../lib/analytics.js'
 
 const linkOut = { target: '_blank', rel: 'noopener noreferrer nofollow' }
@@ -141,9 +142,10 @@ export default function CandidateProfile() {
   const name = firstName(candidate.full_name)
   const status = application?.status
   const otherApplications = myJobApplications.filter((a) => a.id !== application?.id)
-  // Chat with applicants arrives in phase 5; until then this opens the chat page.
+  // Opens the chat with them (or a new one, with this application's job as context).
+  const chatPath = messagePath(userId, application?.job_id)
   const messageButton = (
-    <Link to="/chat" className={`${btnSecondary} gap-1.5 px-4 py-2 text-sm`}>
+    <Link to={chatPath} className={`${btnSecondary} gap-1.5 px-4 py-2 text-sm`}>
       <MessageCircle size={16} />
       Message {name}
     </Link>
@@ -244,7 +246,7 @@ export default function CandidateProfile() {
               </button>
             )}
             {status === 'shortlisted' ? (
-              <Link to="/chat" className={btnPrimary}>
+              <Link to={chatPath} className={btnPrimary}>
                 Message {name}
               </Link>
             ) : (
