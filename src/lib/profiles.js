@@ -23,6 +23,9 @@ export function rowToForm(row, user) {
     location: row?.city ?? '',
     phone: row?.phone ?? '',
     channel: row?.channel ?? '',
+    experience: row?.experience_level ?? '',
+    jobTypes: row?.job_types ?? [],
+    platforms: row?.platforms ?? [],
   }
 }
 
@@ -44,6 +47,9 @@ export async function saveProfileRow(userId, fields) {
     city: fields.location || null,
     phone: fields.phone || null,
     channel: fields.channel || null,
+    experience_level: fields.experience || null,
+    job_types: fields.jobTypes,
+    platforms: fields.platforms,
     profile_completed: true,
   }
   const { error } = await supabase.from('profiles').upsert(row)

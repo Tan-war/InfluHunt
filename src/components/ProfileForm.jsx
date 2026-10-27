@@ -2,9 +2,11 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { Briefcase, Camera, FolderOpen, Link2, Palette, Plus, SquarePlay, X } from 'lucide-react'
 import Modal from './Modal.jsx'
+import { EXPERIENCE_LEVELS, JOB_PLATFORMS, JOB_TYPES } from '../lib/jobs.js'
 import { btnPrimary, btnSecondary, btnText, inputClass } from './ui.js'
 
-const ROLES = [
+// Types of creator. Also the Type of creator filter on Find Talent.
+export const ROLES = [
   'Video editor',
   'Scriptwriter',
   'Thumbnail designer',
@@ -58,6 +60,8 @@ function parseLink(raw) {
   return { platform }
 }
 
+const toggleIn = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item])
+
 const newLinkRow = (url = '') => ({ id: `${Date.now()}-${Math.random()}`, url })
 
 // Capitalise the first letter of each word, leaving the rest as typed.
@@ -86,6 +90,9 @@ function toFormValues(stored, sessionEmail) {
     location: s.location ?? '',
     phone: digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits,
     channel: s.channel ?? '',
+    experience: s.experience ?? '',
+    jobTypes: s.jobTypes ?? [],
+    platforms: s.platforms ?? [],
   }
 }
 
@@ -106,6 +113,9 @@ function toProfile(v) {
     location: capitalise(v.location),
     phone: v.phone ? `+91${v.phone}` : '',
     channel: v.channel.trim(),
+    experience: v.experience,
+    jobTypes: v.jobTypes,
+    platforms: v.platforms,
   }
 }
 
@@ -580,6 +590,56 @@ export default function ProfileForm({ initial, sessionEmail, emailHint, submitLa
             className={inputClass(errorFor('about'))}
           />
           <Counter length={values.about.length} />
+        </Field>
+      </Section>
+
+      <Section title="What you're looking for">
+        <Field label="Experience" optional group>
+          <div className="flex flex-wrap gap-2">
+            {EXPERIENCE_LEVELS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={values.experience === value}
+                onClick={() => set('experience')(values.experience === value ? '' : value)}
+                className={chipClass(values.experience === value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Job types you're open to" optional group>
+          <div className="flex flex-wrap gap-2">
+            {JOB_TYPES.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={values.jobTypes.includes(value)}
+                onClick={() => set('jobTypes')(toggleIn(values.jobTypes, value))}
+                className={chipClass(values.jobTypes.includes(value))}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Platforms you've worked on" optional group>
+          <div className="flex flex-wrap gap-2">
+            {JOB_PLATFORMS.map((platform) => (
+              <button
+                key={platform}
+                type="button"
+                aria-pressed={values.platforms.includes(platform)}
+                onClick={() => set('platforms')(toggleIn(values.platforms, platform))}
+                className={chipClass(values.platforms.includes(platform))}
+              >
+                {platform}
+              </button>
+            ))}
+          </div>
         </Field>
       </Section>
 

@@ -50,7 +50,7 @@ export default function Profile() {
       <BackLink />
       <h1 className="mt-6 text-3xl font-semibold tracking-tight">Your profile</h1>
       <p className="mt-2 text-muted">
-        This is what creators see when you apply. Only creators you apply to can see it.
+        Creators on InfluHunt can find you and see this profile. Your email and phone number are never shown.
       </p>
 
       <div className="mt-6 rounded-card bg-white p-6">

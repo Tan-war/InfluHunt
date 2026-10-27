@@ -7,9 +7,15 @@ import BackLink from '../../components/BackLink.jsx'
 import Modal from '../../components/Modal.jsx'
 import Spinner from '../../components/Spinner.jsx'
 import { btnPrimary, btnSecondary, btnText } from '../../components/ui.js'
-import { fetchApplication, fetchCandidate, setApplicationStatus } from '../../lib/applications.js'
-import { firstName, formatCreatorType } from '../../lib/candidates.js'
-import { fetchJob } from '../../lib/jobs.js'
+import {
+  STATUS_LABELS,
+  fetchApplication,
+  fetchCandidate,
+  fetchCandidateApplications,
+  setApplicationStatus,
+} from '../../lib/applications.js'
+import { STATUS_CHIP, firstName, formatCreatorType } from '../../lib/candidates.js'
+import { experienceLabel, fetchJob, jobTypeLabel } from '../../lib/jobs.js'
 import { formatDate } from '../../lib/format.js'
 import { track } from '../../lib/analytics.js'
 
@@ -24,9 +30,19 @@ function Section({ title, children }) {
   )
 }
 
+const Chips = ({ items }) => (
+  <ul className="flex flex-wrap gap-2">
+    {items.map((item) => (
+      <li key={item} className="rounded-full bg-page px-3 py-1 text-sm">
+        {item}
+      </li>
+    ))}
+  </ul>
+)
+
 // /recruiter/candidates/:userId[?application=<id>]: an applicant's public profile (never email
-// or phone). With ?application, also that application's tracker and the Shortlist / Not
-// selected actions; opening it moves Applied to Viewed.
+// or phone), plus any applications they made to my jobs. With ?application, also that
+// application's tracker and the Shortlist / Not selected actions; opening it moves Applied to Viewed.
 export default function CandidateProfile() {
   const { userId } = useParams()
   const [params] = useSearchParams()
@@ -35,6 +51,7 @@ export default function CandidateProfile() {
   const [candidate, setCandidate] = useState(undefined) // undefined: loading; null: unavailable
   const [application, setApplication] = useState(null)
   const [job, setJob] = useState(null)
+  const [myJobApplications, setMyJobApplications] = useState([])
   const [saving, setSaving] = useState(false)
   const [confirmNotSelected, setConfirmNotSelected] = useState(false)
   const [error, setError] = useState('')
@@ -44,6 +61,7 @@ export default function CandidateProfile() {
     async function load() {
       try {
         const person = await fetchCandidate(userId)
+        const applied = person ? await fetchCandidateApplications(userId) : []
         let app = null
         let appJob = null
         if (person && applicationId) {
@@ -55,6 +73,7 @@ export default function CandidateProfile() {
         setCandidate(person)
         setApplication(app)
         setJob(appJob)
+        setMyJobApplications(applied)
       } catch {
         if (active) setCandidate(null)
       }
@@ -66,13 +85,14 @@ export default function CandidateProfile() {
   }, [userId, applicationId])
 
   // First time a recruiter opens a new application, it becomes Viewed.
-  const markedRef = useRef(false)
+  const markedRef = useRef(null)
   useEffect(() => {
-    if (!application || application.status !== 'applied' || markedRef.current) return
-    markedRef.current = true
+    if (!application || application.status !== 'applied' || markedRef.current === application.id) return
+    markedRef.current = application.id
     setApplicationStatus(application.id, 'viewed')
       .then(() => {
         setApplication((a) => ({ ...a, status: 'viewed' }))
+        setMyJobApplications((list) => list.map((a) => (a.id === application.id ? { ...a, status: 'viewed' } : a)))
         track('application_status_changed', { from: 'applied', to: 'viewed' })
       })
       .catch(() => {})
@@ -92,6 +112,7 @@ export default function CandidateProfile() {
     try {
       await setApplicationStatus(application.id, to)
       setApplication((a) => ({ ...a, status: to }))
+      setMyJobApplications((list) => list.map((a) => (a.id === application.id ? { ...a, status: to } : a)))
       track('application_status_changed', { from, to })
     } catch {
       setError("That didn't work. Please try again.")
@@ -119,6 +140,7 @@ export default function CandidateProfile() {
 
   const name = firstName(candidate.full_name)
   const status = application?.status
+  const otherApplications = myJobApplications.filter((a) => a.id !== application?.id)
   // Chat with applicants arrives in phase 5; until then this opens the chat page.
   const messageButton = (
     <Link to="/chat" className={`${btnSecondary} gap-1.5 px-4 py-2 text-sm`}>
@@ -137,11 +159,12 @@ export default function CandidateProfile() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">{candidate.full_name}</h1>
-              {candidate.no_work_yet && (
+              {candidate.is_just_starting && (
                 <span className="rounded-full bg-page px-2.5 py-0.5 text-xs font-medium">New creator</span>
               )}
             </div>
             <p className="text-muted">{formatCreatorType(candidate.roles, candidate.role_other)}</p>
+            {candidate.experience_level && <p className="text-sm">Experience: {experienceLabel(candidate.experience_level)}</p>}
           </div>
           {/* Once shortlisted, the application card below shows the Message button instead. */}
           {status !== 'shortlisted' && messageButton}
@@ -153,7 +176,7 @@ export default function CandidateProfile() {
               <p className="whitespace-pre-line leading-relaxed">{candidate.bio}</p>
             </Section>
           )}
-          {candidate.no_work_yet ? (
+          {candidate.is_just_starting ? (
             candidate.starting_note && (
               <Section title="What they'd like to try first">
                 <p className="whitespace-pre-line leading-relaxed">{candidate.starting_note}</p>
@@ -177,13 +200,17 @@ export default function CandidateProfile() {
           )}
           {candidate.skills.length > 0 && (
             <Section title="Skills">
-              <ul className="flex flex-wrap gap-2">
-                {candidate.skills.map((skill) => (
-                  <li key={skill} className="rounded-full bg-page px-3 py-1 text-sm">
-                    {skill}
-                  </li>
-                ))}
-              </ul>
+              <Chips items={candidate.skills} />
+            </Section>
+          )}
+          {candidate.platforms.length > 0 && (
+            <Section title="Platforms they've worked on">
+              <Chips items={candidate.platforms} />
+            </Section>
+          )}
+          {candidate.job_types.length > 0 && (
+            <Section title="Open to">
+              <Chips items={candidate.job_types.map(jobTypeLabel)} />
             </Section>
           )}
         </div>
@@ -226,6 +253,33 @@ export default function CandidateProfile() {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {otherApplications.length > 0 && (
+        <div className="mt-6 rounded-card bg-white p-6">
+          <h2 className="text-lg font-semibold tracking-tight">
+            {application ? 'Also applied to your jobs' : 'Applied to your jobs'}
+          </h2>
+          <ul className="mt-3 divide-y divide-line">
+            {otherApplications.map((a) => (
+              <li key={a.id}>
+                <Link
+                  to={`/recruiter/candidates/${userId}?application=${a.id}`}
+                  state={{ source: 'applicants' }}
+                  className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors duration-200 ease-in-out hover:bg-page"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{a.jobs?.title ?? 'Your job'}</span>
+                    <span className="block text-xs text-muted">Applied {formatDate(a.created_at)}</span>
+                  </span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>
+                    {STATUS_LABELS[a.status]}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

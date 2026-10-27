@@ -72,11 +72,11 @@ export async function fetchApplication(applicationId) {
   return data
 }
 
-// All applications this candidate made to my jobs.
+// All applications this candidate made to my jobs (the rules hide the rest), with job titles.
 export async function fetchCandidateApplications(candidateId) {
   const { data, error } = await supabase
     .from('applications')
-    .select('id, job_id, status, created_at')
+    .select('id, job_id, status, created_at, jobs(title)')
     .eq('applicant_id', candidateId)
     .order('created_at', { ascending: false })
   if (error) throw error
