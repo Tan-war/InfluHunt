@@ -24,6 +24,12 @@ function NavLink({ to, label, Icon }) {
   )
 }
 
+const RECRUITER_LINKS = [
+  { to: '/recruiter/jobs', label: 'View jobs posted', Icon: BriefcaseBusiness },
+  { to: '/recruiter/talent', label: 'Find talent', Icon: Users },
+  { to: '/recruiter/jobs/new', label: 'Post an opportunity', Icon: Plus },
+]
+
 const menuItemClass =
   'block w-full rounded-input px-3 py-2 text-left text-base text-ink transition-colors duration-200 ease-in-out hover:bg-page'
 
@@ -130,15 +136,10 @@ export default function TopBar() {
           ) : user ? (
             <>
               {isRecruiter && (
-                <>
-                  <NavLink to="/recruiter/jobs" label="View jobs posted" Icon={BriefcaseBusiness} />
-                  {/* On Find talent itself, offer posting instead. */}
-                  {pathname === '/recruiter/talent' ? (
-                    <NavLink to="/recruiter/jobs/new" label="Post an opportunity" Icon={Plus} />
-                  ) : (
-                    <NavLink to="/recruiter/talent" label="Find talent" Icon={Users} />
-                  )}
-                </>
+                // Two of the three: the page you're on drops out. Elsewhere, the first two.
+                RECRUITER_LINKS.filter((link) => link.to !== pathname)
+                  .slice(0, 2)
+                  .map((link) => <NavLink key={link.to} {...link} />)
               )}
               <Link to="/chat" aria-label={unread > 0 ? `Chat, ${unread} unread` : 'Chat'} className={iconLinkClass}>
                 <MessageCircle size={24} strokeWidth={1.75} />
