@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth.jsx'
 import { loginPath } from '../lib/redirect.js'
 import { homeFor } from '../lib/roles.js'
 import { useUnreadCount } from '../lib/chat/useUnreadCount.js'
+import { useUnreadNotifications } from '../lib/notifications.js'
 
 const iconLinkClass =
   'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition-colors duration-200 ease-in-out hover:bg-page'
@@ -29,6 +30,16 @@ const RECRUITER_LINKS = [
   { to: '/recruiter/talent', label: 'Find talent', Icon: Users },
   { to: '/recruiter/jobs/new', label: 'Post an opportunity', Icon: Plus },
 ]
+
+// Unread count on the chat and bell icons; "9+" past nine.
+function CountBadge({ count }) {
+  if (count <= 0) return null
+  return (
+    <span className="absolute right-0.5 top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-white">
+      {count > 9 ? '9+' : count}
+    </span>
+  )
+}
 
 const menuItemClass =
   'block w-full rounded-input px-3 py-2 text-left text-base text-ink transition-colors duration-200 ease-in-out hover:bg-page'
@@ -112,6 +123,7 @@ export default function TopBar() {
   const { pathname, search } = useLocation()
   const isRecruiter = role === 'recruiter'
   const unread = useUnreadCount(role ? user?.id : null)
+  const unreadNotifications = useUnreadNotifications(role ? user?.id : null)
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-white/80 backdrop-blur">
@@ -125,8 +137,8 @@ export default function TopBar() {
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-ink text-white">
             <Sparkles size={20} strokeWidth={2} />
           </span>
-          {/* Recruiters have more icons, so on phones they get the logo mark only. */}
-          <span className={isRecruiter ? 'hidden sm:inline' : ''}>INFLUHUNT</span>
+          {/* Signed in, the icons need the room, so phones get the logo mark only. */}
+          <span className={user ? 'hidden sm:inline' : ''}>INFLUHUNT</span>
         </Link>
         <div className={`flex items-center ${isRecruiter ? 'gap-1 sm:gap-3' : 'gap-3'}`}>
           {loading ? (
@@ -142,17 +154,16 @@ export default function TopBar() {
               )}
               <Link to="/chat" aria-label={unread > 0 ? `Chat, ${unread} unread` : 'Chat'} className={iconLinkClass}>
                 <MessageCircle size={24} strokeWidth={1.75} />
-                {unread > 0 && (
-                  <span className="absolute right-0.5 top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-white">
-                    {unread > 9 ? '9+' : unread}
-                  </span>
-                )}
+                <CountBadge count={unread} />
               </Link>
-              {isRecruiter && (
-                <Link to="/notifications" aria-label="Notifications" className={iconLinkClass}>
-                  <Bell size={24} strokeWidth={1.75} />
-                </Link>
-              )}
+              <Link
+                to="/notifications"
+                aria-label={unreadNotifications > 0 ? `Notifications, ${unreadNotifications} unread` : 'Notifications'}
+                className={iconLinkClass}
+              >
+                <Bell size={24} strokeWidth={1.75} />
+                <CountBadge count={unreadNotifications} />
+              </Link>
               <ProfileMenu />
             </>
           ) : (
