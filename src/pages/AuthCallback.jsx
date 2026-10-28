@@ -2,15 +2,17 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Spinner from '../components/Spinner.jsx'
 import { supabase } from '../lib/supabaseClient.js'
-import { fetchProfile } from '../lib/profiles.js'
+import { useAuth } from '../lib/auth.jsx'
 import { safeNext } from '../lib/redirect.js'
+import { isRole, routeAfterSignIn } from '../lib/roles.js'
 import { track } from '../lib/analytics.js'
 
-// Where Google (via Supabase) sends people back: /auth/callback?next=<path>&code=...
+// Where Google (via Supabase) sends people back: /auth/callback?next=<path>[&intent=<role>]&code=...
 // The Supabase client swaps the code for a session as it starts up; this page waits
-// for that, then sends the person on.
+// for that, gives a brand-new account its role (from intent), then sends the person on.
 export default function AuthCallback() {
   const navigate = useNavigate()
+  const { refreshProfile, setRole } = useAuth()
   const handledRef = useRef(false)
 
   useEffect(() => {
@@ -21,11 +23,12 @@ export default function AuthCallback() {
     const query = new URLSearchParams(window.location.search)
     const hash = new URLSearchParams(window.location.hash.slice(1))
     const next = safeNext(query.get('next'))
-    const destination = next === '/' ? '/find' : next
 
     const fail = (reason, detail) => {
       track('sign_in_failed', { reason, detail })
-      navigate(`/login?error=${reason}&next=${encodeURIComponent(next)}`, { replace: true })
+      // Keep the intent, so trying again still gives a new account the right role.
+      const intent = isRole(query.get('intent')) ? `&intent=${query.get('intent')}` : ''
+      navigate(`/login?error=${reason}&next=${encodeURIComponent(next)}${intent}`, { replace: true })
     }
 
     async function finishSignIn() {
@@ -47,25 +50,34 @@ export default function AuthCallback() {
         return
       }
 
-      let profile = null
-      try {
-        profile = await fetchProfile(user.id)
-      } catch (err) {
-        console.error('[InfluHunt] Loading the profile failed', err)
-      }
       // New user: the account was created moments ago, on this sign-in.
       const isNewUser = Math.abs(new Date(user.last_sign_in_at) - new Date(user.created_at)) < 60_000
       track('sign_in_completed', { is_new_user: isNewUser })
 
-      if (!profile?.profile_completed) {
-        navigate(`/profile?next=${encodeURIComponent(destination)}`, { replace: true })
-      } else {
-        navigate(destination, { replace: true })
+      // No role yet: "Post an Opportunity" (recruiter) and Apply (applicant) say which.
+      // Without an intent, the chooser on /welcome asks.
+      let profile = await refreshProfile()
+      const intent = query.get('intent')
+      if (!profile?.role && isRole(intent)) {
+        try {
+          profile = await setRole(intent)
+        } catch (err) {
+          console.error('[InfluHunt] Setting the role failed', err)
+        }
       }
+      const role = profile?.role ?? null
+      // refreshProfile also loads the recruiter profile for recruiters; read it fresh.
+      let recruiterProfile = null
+      if (role === 'recruiter') {
+        const { data: row } = await supabase.from('recruiter_profiles').select('profile_completed').eq('id', user.id).maybeSingle()
+        recruiterProfile = row
+      }
+      // "/" means "home for my role", which routeAfterSignIn works out.
+      navigate(routeAfterSignIn({ role, profile, recruiterProfile, next }), { replace: true })
     }
 
     finishSignIn()
-  }, [navigate])
+  }, [navigate, refreshProfile, setRole])
 
   return <Spinner label="Signing you in" />
 }

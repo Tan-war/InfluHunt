@@ -1,4 +1,5 @@
 // Formatting for the chat UI: times, day labels, and message text with links.
+import { formatCreatorType } from '../candidates.js'
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
 const daysAgo = (iso) => Math.round((startOfDay(new Date()) - startOfDay(new Date(iso))) / 86_400_000)
 
@@ -43,3 +44,19 @@ export function renderMessageText(body) {
     )
   })
 }
+
+// Who a chat is with, for the chat list and the chat header.
+//   Recruiter's view: the applicant's name and photo; their creator type, plus the job if any.
+//   Applicant's view: the recruiter's name and logo; their brand, plus the job if any.
+export function chatPartner(c) {
+  const context =
+    c.my_side === 'recruiter' ? formatCreatorType(c.other_roles ?? [], c.other_role_other ?? '') : c.recruiter_brand_name
+  return {
+    name: c.other_name || 'InfluHunt member',
+    avatarUrl: c.other_avatar_url,
+    subtitle: [context, c.job_title].filter(Boolean).join(' · '),
+  }
+}
+
+// The note at the top of a chat, for the applicant: "Asha messaged you about Video editor".
+export const startedNote = (c) => `${c.other_name || 'The creator'} messaged you${c.job_title ? ` about ${c.job_title}` : ''}`

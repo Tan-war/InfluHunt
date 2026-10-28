@@ -3,6 +3,7 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import Spinner from '../components/Spinner.jsx'
 import { useAuth } from '../lib/auth.jsx'
 import { safeNext } from '../lib/redirect.js'
+import { isRole, routeAfterSignIn } from '../lib/roles.js'
 import { track } from '../lib/analytics.js'
 
 const ERRORS = {
@@ -25,9 +26,11 @@ function GoogleLogo() {
 }
 
 export default function Login() {
-  const { user, loading, configured, signInWithGoogle } = useAuth()
+  const { user, role, profile, recruiterProfile, loading, configured, signInWithGoogle } = useAuth()
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
+  // From "Post an Opportunity" (recruiter) or Apply (applicant): the role a new account gets.
+  const intent = isRole(params.get('intent')) ? params.get('intent') : null
   const errorMessage = ERRORS[params.get('error')]
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState('')
@@ -36,19 +39,19 @@ export default function Login() {
   useEffect(() => {
     if (viewedRef.current) return
     viewedRef.current = true
-    track('sign_in_viewed', { next })
-  }, [next])
+    track('sign_in_viewed', { next, intent })
+  }, [next, intent])
 
   if (loading) return <Spinner />
-  // Already signed in: carry on to where they were headed (Find Opportunities by default).
-  if (user) return <Navigate to={next === '/' ? '/find' : next} replace />
+  // Already signed in: carry on to where they were headed, or their home page.
+  if (user) return <Navigate to={routeAfterSignIn({ role, profile, recruiterProfile, next })} replace />
 
   async function handleGoogle() {
-    track('sign_in_clicked', { method: 'google' })
+    track('sign_in_clicked', { method: 'google', intent })
     setStarting(true)
     setStartError('')
     // On success the browser leaves for Google, so the button stays in its loading state.
-    const { error } = await signInWithGoogle(next)
+    const { error } = await signInWithGoogle(next, intent)
     if (error) {
       setStarting(false)
       setStartError(ERRORS.failed)

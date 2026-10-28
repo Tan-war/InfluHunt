@@ -1,16 +1,16 @@
-import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { btnPrimary, btnSecondary } from '../components/ui.js'
 import Spinner from '../components/Spinner.jsx'
 import { useAuth } from '../lib/auth.jsx'
+import { loginPath } from '../lib/redirect.js'
+import { homeFor } from '../lib/roles.js'
 
 export default function Landing() {
-  const [showComingSoon, setShowComingSoon] = useState(false)
-  const { user, loading } = useAuth()
+  const { user, role, loading } = useAuth()
 
-  // Signed-in people go straight to their home page.
+  // Signed-in people go straight to their home page (or pick a role first).
   if (loading) return <Spinner />
-  if (user) return <Navigate to="/find" replace />
+  if (user) return <Navigate to={homeFor(role)} replace />
 
   return (
     <div className="flex min-h-[calc(100vh-5rem)] flex-col items-center justify-center text-center">
@@ -23,15 +23,14 @@ export default function Landing() {
         <Link to="/find" className={btnPrimary}>
           Find opportunities
         </Link>
-        <button type="button" onClick={() => setShowComingSoon(true)} className={btnSecondary}>
+        {/* New accounts from here become recruiters and go straight to their profile form. */}
+        <Link to={loginPath('/recruiter/onboarding', 'recruiter')} className={btnSecondary}>
           Post an opportunity
-        </button>
+        </Link>
         <Link to="/login" className={btnSecondary}>
           Sign in
         </Link>
       </div>
-
-      {showComingSoon && <p className="mt-4 text-sm text-muted">Coming soon.</p>}
     </div>
   )
 }

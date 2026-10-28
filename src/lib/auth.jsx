@@ -1,17 +1,22 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { isSupabaseConfigured, supabase } from './supabaseClient.js'
 import { fetchProfile } from './profiles.js'
+import { fetchRecruiterProfile } from './recruiterProfiles.js'
+import { isRole } from './roles.js'
 import { safeNext } from './redirect.js'
 import { track } from './analytics.js'
 
 const AuthContext = createContext(null)
 
-// Signed-in user, their profiles row, and sign-in/out for the whole app.
+// Signed-in user, their profiles row (with their role), their recruiter profile if
+// they're a recruiter, and sign-in/out for the whole app.
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured)
   const [profile, setProfile] = useState(null)
+  const [recruiterProfile, setRecruiterProfile] = useState(null)
   const [profileFor, setProfileFor] = useState(null) // user id the profile was loaded for
+  const requestRef = useRef(0)
 
   const user = session?.user ?? null
   const userId = user?.id ?? null
@@ -28,38 +33,62 @@ export function AuthProvider({ children }) {
     return () => data.subscription.unsubscribe()
   }, [])
 
+  // Loads the profiles row, plus the recruiter profile for recruiters. Only the newest
+  // request updates state, so an older, slower load can't overwrite fresh data
+  // (e.g. the role set moments ago on the callback page).
   const refreshProfile = useCallback(async () => {
-    if (!userId) return null
+    const id = userId ?? (await supabase?.auth.getSession())?.data.session?.user?.id
+    if (!id) return null
+    const request = ++requestRef.current
+    let row = null
+    let recruiterRow = null
     try {
-      const row = await fetchProfile(userId)
-      setProfile(row)
-      return row
+      row = await fetchProfile(id)
+      if (row?.role === 'recruiter') recruiterRow = await fetchRecruiterProfile(id)
     } catch (error) {
       console.error('[InfluHunt] Loading the profile failed', error)
-      setProfile(null)
-      return null
-    } finally {
-      setProfileFor(userId)
     }
+    if (request === requestRef.current) {
+      setProfile(row)
+      setRecruiterProfile(recruiterRow)
+      setProfileFor(id)
+    }
+    return row
   }, [userId])
 
   useEffect(() => {
     if (!userId) {
+      requestRef.current++
       setProfile(null)
+      setRecruiterProfile(null)
       setProfileFor(null)
       return
     }
     refreshProfile()
   }, [userId, refreshProfile])
 
-  const signInWithGoogle = useCallback(async (returnTo) => {
+  // intent ('applicant' | 'recruiter') rides along in the callback URL, so a brand-new
+  // account gets the right role when it comes back.
+  const signInWithGoogle = useCallback(async (returnTo, intent) => {
     if (!supabase) return { error: new Error('Sign-in is not configured') }
     // window.location.origin (not a fixed localhost) keeps this working once hosted.
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext(returnTo))}`
+    const intentParam = isRole(intent) ? `&intent=${intent}` : ''
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext(returnTo))}${intentParam}`
     const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } })
     if (error) track('sign_in_failed', { reason: 'start_failed', message: error.message })
     return { error }
   }, [])
+
+  // Sets the role once (the database refuses to change it later), then reloads the profile.
+  const setRole = useCallback(
+    async (newRole) => {
+      const { error } = await supabase.rpc('set_my_role', { new_role: newRole })
+      if (error) throw error
+      if (newRole === 'recruiter') track('recruiter_signup_started')
+      return refreshProfile()
+    },
+    [refreshProfile],
+  )
 
   const signOut = useCallback(async () => {
     if (!supabase) return
@@ -76,10 +105,13 @@ export function AuthProvider({ children }) {
       value={{
         user,
         profile,
+        role: profile?.role ?? null,
+        recruiterProfile,
         loading,
         configured: isSupabaseConfigured,
         signInWithGoogle,
         signOut,
+        setRole,
         refreshProfile,
       }}
     >

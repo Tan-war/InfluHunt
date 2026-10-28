@@ -22,3 +22,7 @@ if (looksSecret) {
 // the callback page (detectSessionInUrl, on by default). The session is kept in
 // localStorage, so it survives a refresh.
 export const supabase = isSupabaseConfigured ? createClient(url, key, { auth: { flowType: 'pkce' } }) : null
+
+// Development only: `supabase` in the browser console, for checking the database rules by hand
+// (it can only do what the signed-in user is allowed to). Never in production builds.
+if (import.meta.env.DEV && supabase) window.supabase = supabase
